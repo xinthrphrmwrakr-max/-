@@ -90,17 +90,16 @@ ${p[1]} 🆚 ${p[2]}
     // =========================
 if (currentGame && currentGame.open) {
 
-  const match = text.match(/^(\S+)\s*(\d+)/);
-
+  const match = text.match(/^([ดง])\s*(\d+)/i);
   if (!match) return;
 
-  const team = match[1];
+  const shortTeam = match[1];
   const amount = parseInt(match[2]);
 
-  if (
-    team !== currentGame.teamA &&
-    team !== currentGame.teamB
-  ) return;
+  const team =
+    shortTeam === "ด"
+      ? currentGame.teamA
+      : currentGame.teamB;
 
   if (users[userId].balance < amount) {
     return client.replyMessage(event.replyToken,{

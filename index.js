@@ -88,24 +88,44 @@ ${p[1]} 🆚 ${p[2]}
     // =========================
     // 🎯 แทง
     // =========================
-    if(currentGame && currentGame.open){
+if (currentGame && currentGame.open) {
 
-      const p=text.split(" ");
-      const team=p[0];
-      const amount=parseInt(p[1]);
+  const match = text.match(/^(\S+)\s*(\d+)/);
 
-      if(
-        (team===currentGame.teamA ||
-         team===currentGame.teamB)
-         && amount>0
-      ){
+  if (!match) return;
 
-        if(users[userId].balance<amount){
-          return client.replyMessage(event.replyToken,{
-            type:'text',
-            text:`${name}\n❌ เครดิตไม่พอ`
-          });
-        }
+  const team = match[1];
+  const amount = parseInt(match[2]);
+
+  if (
+    team !== currentGame.teamA &&
+    team !== currentGame.teamB
+  ) return;
+
+  if (users[userId].balance < amount) {
+    return client.replyMessage(event.replyToken,{
+      type:'text',
+      text:`${name}\n❌ เครดิตไม่พอ`
+    });
+  }
+
+  users[userId].balance -= amount;
+
+  bets.push({
+    userId,
+    name,
+    team,
+    amount
+  });
+
+  return client.replyMessage(event.replyToken,{
+    type:'text',
+text:
+`${name}
+${team} ${amount.toLocaleString()} บ. ✅ติด
+คงเหลือ ${users[userId].balance.toLocaleString()} 💰`
+  });
+}
 
         users[userId].balance-=amount;
 

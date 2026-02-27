@@ -14,50 +14,67 @@ const client = new line.Client(config);
 const ADMIN_ID = "U3bb879084521bbe454c63a2fb7d56c64";
 
 // ================= TABLE =================
-let tableOpen=false;
-let rateRed=0;
-let rateBlue=0;
+let tableOpen = false;
+let rateRed = 0;
+let rateBlue = 0;
 
-const MAX_TABLE=100000;
-const MAX_USER_BET=20000;
+const MAX_TABLE = 100000;
+const MAX_USER_BET = 20000;
 
-let users={};
-let bets=[];
+let users = {};
+let bets = [];
 
-let totalRed=0;
-let totalBlue=0;
+let totalRed = 0;
+let totalBlue = 0;
 
 
 // ================= USER =================
-function getUser(id,name){
-if(!users[id]){
-users[id]={
-name,
-credit:20000,
-roundBet:0
-};
-}
-return users[id];
+function getUser(id, name) {
+  if (!users[id]) {
+    users[id] = {
+      name,
+      credit: 20000,
+      roundBet: 0
+    };
+  }
+  return users[id];
 }
 
 
 // ================= WEBHOOK =================
-app.post(
-"/webhook",
+app.post("/webhook",
 line.middleware(config),
 async (req,res)=>{
-
 try{
-await Promise.all(
-req.body.events.map(handleEvent)
-);
+await Promise.all(req.body.events.map(handleEvent));
 res.status(200).end();
-
-}catch(err){
-console.log("ERROR:",err);
+}catch(e){
+console.log(e);
 res.status(200).end();
 }
 });
+
+
+// ================= GET PROFILE SAFE =================
+async function getProfileSafe(event){
+
+try{
+
+if(event.source.type==="group"){
+return await client.getGroupMemberProfile(
+event.source.groupId,
+event.source.userId
+);
+}
+
+return await client.getProfile(
+event.source.userId
+);
+
+}catch{
+return {displayName:"Player"};
+}
+}
 
 
 // ================= MAIN =================
@@ -66,19 +83,21 @@ async function handleEvent(event){
 if(event.type!=="message") return;
 if(event.message.type!=="text") return;
 
+if(!event.source.userId) return;
+
 const text=event.message.text.trim();
 
-const profile=
-await client.getProfile(event.source.userId);
-
-const user=
-getUser(event.source.userId,profile.displayName);
+const profile=await getProfileSafe(event);
+const user=getUser(
+event.source.userId,
+profile.displayName
+);
 
 const isAdmin=
 event.source.userId===ADMIN_ID;
 
 
-// ========= CREDIT =========
+// ========= CHECK CREDIT =========
 if(text.toLowerCase()==="c"){
 return reply(event,
 `${user.name}
@@ -86,21 +105,33 @@ return reply(event,
 }
 
 
-// ========= OPEN RATE =========
+// ========= OPEN =========
 const open=text.match(/^\/open\s(\d+)\s(\d+)/);
 
 if(isAdmin && open){
 
 rateRed=parseInt(open[1]);
 rateBlue=parseInt(open[2]);
-tableOpen=true;
 
+tableOpen=true;
 resetRound();
 
 return reply(event,
 `🔥 เปิดราคา
 🔴 ${rateRed}
 🔵 ${rateBlue}`);
+}
+
+
+// ========= RESULT =========
+if(isAdmin && text==="/แดงชนะ"){
+await payWinner("แดง");
+return reply(event,"🏆 แดงชนะ จ่ายแล้ว");
+}
+
+if(isAdmin && text==="/น้ำเงินชนะ"){
+await payWinner("น้ำเงิน");
+return reply(event,"🏆 น้ำเงินชนะ จ่ายแล้ว");
 }
 
 
@@ -142,19 +173,6 @@ team==="แดง"
 :totalBlue+=amount;
 
 return replyFlex(event);
-
-
-// ========= RESULT =========
-if(isAdmin && text==="/แดงชนะ"){
-await payWinner("แดง");
-return reply(event,"🏆 แดงชนะ จ่ายแล้ว");
-}
-
-if(isAdmin && text==="/น้ำเงินชนะ"){
-await payWinner("น้ำเงิน");
-return reply(event,"🏆 น้ำเงินชนะ จ่ายแล้ว");
-}
-
 }
 
 
@@ -206,7 +224,7 @@ Object.values(users)
 .slice(0,5)
 .map((u,i)=>
 `${i+1}. ${u.name} ${u.roundBet.toLocaleString()}`
-).join("\n")||"-";
+).join("\n") || "-";
 
 return client.replyMessage(
 event.replyToken,{
@@ -224,27 +242,12 @@ text:"🔥 โต๊ะเดิมพัน LIVE",
 weight:"bold",
 size:"lg"
 },
-{
-type:"text",
-text:`🔴 ${totalRed.toLocaleString()}`
-},
-{
-type:"text",
-text:`🔵 ${totalBlue.toLocaleString()}`
-},
-{
-type:"text",
-text:`ราคา ${rateRed}/${rateBlue}`
-},
+{type:"text",text:`🔴 ${totalRed.toLocaleString()}`},
+{type:"text",text:`🔵 ${totalBlue.toLocaleString()}`},
+{type:"text",text:`ราคา ${rateRed}/${rateBlue}`},
 {type:"separator"},
-{
-type:"text",
-text:"🏆 อันดับนักแทง"
-},
-{
-type:"text",
-text:ranking
-}
+{type:"text",text:"🏆 อันดับนักแทง"},
+{type:"text",text:ranking}
 ]
 }
 }
@@ -259,6 +262,7 @@ event.replyToken,
 {type:"text",text}
 );
 }
+
 
 app.listen(
 process.env.PORT||3000,

@@ -4,8 +4,8 @@ const line = require("@line/bot-sdk");
 const app = express();
 
 const config = {
-  channelAccessToken: "CHANNEL_ACCESS_TOKEN",
-  channelSecret: "CHANNEL_SECRET"
+  channelAccessToken: "rULcYwAsV4CS7pD4hWcQvNTvxt3wHIXGjVUfCQFN6rYJkn49wc2jG8EPaqJxJToqmETEO04/zAjuu4RojiWR/SRZFzTBMpQEeBpgYQbDJ2Sr63x4Ia2wu8vfSR9dkgZyur7SI4f56PN0LHSuen+EpwdB04t89/1O/w1cDnyilFU=",
+  channelSecret: "5bd5a4a0980d497b71e4eae7d217d1cf"
 };
 
 const client = new line.Client(config);

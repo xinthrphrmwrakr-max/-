@@ -11,12 +11,16 @@ const config = {
 const client = new line.Client(config);
 
 // =====================
-// ✅ ADMIN USER ID
+// ✅ ADMIN
 // =====================
-const ADMIN_ID = "U3bb879084521bbe454c63a2fb7d56c64"; // Uxxxxxxxx
+const ADMIN_ID = "U3bb879084521bbe454c63a2fb7d56c64";
 
 // =====================
+// ✅ TABLE STATE
+// =====================
 let tableOpen = false;
+let rateRed = 0;
+let rateBlue = 0;
 
 let users = {};
 let bets = [];
@@ -25,7 +29,8 @@ let totalRed = 0;
 let totalBlue = 0;
 
 // =====================
-
+// ✅ USER
+// =====================
 function getUser(id, name) {
   if (!users[id]) {
     users[id] = {
@@ -37,133 +42,167 @@ function getUser(id, name) {
 }
 
 // =====================
-// ✅ WEBHOOK FIX 502
+// ✅ WEBHOOK SAFE
 // =====================
 app.post(
-  "/webhook",
-  line.middleware(config),
-  async (req, res) => {
-    try {
-      await Promise.all(
-        req.body.events.map(handleEvent)
-      );
-      res.status(200).end();
-    } catch (err) {
-      console.log(err);
-      res.status(200).end();
-    }
-  }
+"/webhook",
+line.middleware(config),
+async (req,res)=>{
+try{
+await Promise.all(
+req.body.events.map(handleEvent)
 );
+res.status(200).end();
+}catch(err){
+console.log(err);
+res.status(200).end();
+}
+});
 
 // =====================
+// ✅ MAIN EVENT
+// =====================
+async function handleEvent(event){
 
-async function handleEvent(event) {
+if(event.type!=="message") return;
+if(event.message.type!=="text") return;
 
-  if (event.type !== "message") return;
-  if (event.message.type !== "text") return;
+const text =
+event.message.text.trim();
 
-  const text = event.message.text.trim();
+const profile =
+await client.getProfile(
+event.source.userId
+);
 
-  const profile =
-    await client.getProfile(
-      event.source.userId
-    );
+const user =
+getUser(
+event.source.userId,
+profile.displayName
+);
 
-  const user =
-    getUser(
-      event.source.userId,
-      profile.displayName
-    );
+const isAdmin =
+event.source.userId===ADMIN_ID;
 
-  const isAdmin =
-    event.source.userId === ADMIN_ID;
 
-  // =====================
-  // ✅ ADMIN
-  // =====================
-
-  if (isAdmin && text === "/เปิดโต๊ะ") {
-    tableOpen = true;
-    return reply(event,"✅ เปิดรับแทง");
-  }
-
-  if (isAdmin && text === "/ปิดโต๊ะ") {
-    tableOpen = false;
-    return reply(event,"🚫 ปิดโต๊ะ");
-  }
-
-  if (isAdmin && text === "/ล้างโต๊ะ") {
-    bets=[];
-    totalRed=0;
-    totalBlue=0;
-    return reply(event,"♻️ ล้างแล้ว");
-  }
-
-  if (isAdmin && text === "/ยกใหม่") {
-    bets=[];
-    totalRed=0;
-    totalBlue=0;
-    tableOpen=true;
-    return reply(event,"🔥 เปิดยกใหม่");
-  }
-
-  if (text === "/สรุป")
-    return replyFlex(event);
-
-  // =====================
-  // ✅ ด100 / ง500
-  // =====================
-
-  const betMatch =
-    text.match(/^(ด|ง)\s?(\d+)/i);
-
-  if (!betMatch) return;
-
-  if (!tableOpen)
-    return reply(event,"🚫 ยังไม่เปิดโต๊ะ");
-
-  const side = betMatch[1];
-  const amount =
-    parseInt(betMatch[2]);
-
-  if (user.credit < amount)
-    return reply(event,"เงินไม่พอ");
-
-  user.credit -= amount;
-
-  const team =
-    side === "ด"
-      ? "แดง"
-      : "น้ำเงิน";
-
-  bets.push({
-    name:user.name,
-    team,
-    amount
-  });
-
-  if(team==="แดง")
-    totalRed+=amount;
-  else
-    totalBlue+=amount;
-
-  return reply(
-    event,
+// =====================
+// ✅ CREDIT CHECK
+// =====================
+if(text.toLowerCase()==="c"){
+return reply(event,
 `${user.name}
-${team} ${amount.toLocaleString()} บ. ✅ติด
-คงเหลือ ${user.credit.toLocaleString()} 💰`
-  );
+เครดิต ${user.credit.toLocaleString()} 💰`);
+}
+
+
+// =====================
+// ✅ OPEN RATE
+// /open 10 9
+// =====================
+const openMatch =
+text.match(/^\/open\s(\d+)\s(\d+)/);
+
+if(isAdmin && openMatch){
+
+rateRed=openMatch[1];
+rateBlue=openMatch[2];
+tableOpen=true;
+
+return reply(event,
+`🔥 เปิดราคาแล้ว
+🔴 แดง ${rateRed}
+🔵 น้ำเงิน ${rateBlue}`);
+}
+
+
+// =====================
+// ✅ ADMIN COMMAND
+// =====================
+if(isAdmin && text==="/ปิดโต๊ะ"){
+tableOpen=false;
+return reply(event,"🚫 ปิดรับแทง");
+}
+
+if(isAdmin && text==="/เปิดโต๊ะ"){
+tableOpen=true;
+return reply(event,"✅ เปิดรับแทง");
+}
+
+if(isAdmin && text==="/ล้างโต๊ะ"){
+bets=[];
+totalRed=0;
+totalBlue=0;
+return reply(event,"♻️ ล้างโต๊ะแล้ว");
+}
+
+if(isAdmin && text==="/ยกใหม่"){
+bets=[];
+totalRed=0;
+totalBlue=0;
+tableOpen=true;
+return reply(event,"🔥 เปิดยกใหม่");
+}
+
+if(text==="/สรุป")
+return replyFlex(event);
+
+
+// =====================
+// ✅ BET SYSTEM
+// ด100 ง500
+// =====================
+const betMatch =
+text.match(/^(ด|ง)\s?(\d+)/i);
+
+if(!betMatch) return;
+
+if(!tableOpen)
+return reply(event,"🚫 ยังไม่เปิดโต๊ะ");
+
+const side=betMatch[1];
+const amount=parseInt(betMatch[2]);
+
+if(user.credit<amount)
+return reply(event,"เงินไม่พอ");
+
+user.credit-=amount;
+
+const team=
+side==="ด"
+?"แดง"
+:"น้ำเงิน";
+
+const rate=
+team==="แดง"
+?rateRed
+:rateBlue;
+
+bets.push({
+name:user.name,
+team,
+amount
+});
+
+if(team==="แดง")
+totalRed+=amount;
+else
+totalBlue+=amount;
+
+return reply(event,
+`${user.name}
+${team} ${amount.toLocaleString()} บ. @${rate} ✅ติด
+คงเหลือ ${user.credit.toLocaleString()} 💰`);
 }
 
 // =====================
-// ✅ FLEX
+// ✅ FLEX SUMMARY
 // =====================
-
 function replyFlex(event){
+
 return client.replyMessage(
 event.replyToken,{
 type:"flex",
-altText:"summary",
+altText:"โต๊ะเดิมพัน",
 contents:{
 type:"bubble",
 body:{
@@ -172,17 +211,25 @@ layout:"vertical",
 contents:[
 {
 type:"text",
-text:"📊 สรุปโต๊ะ",
+text:"📊 สรุปโต๊ะเดิมพัน",
 weight:"bold",
 size:"lg"
 },
 {
 type:"text",
-text:`🔴 ${totalRed.toLocaleString()}`
+text:`🔴 แดง ${totalRed.toLocaleString()}`
 },
 {
 type:"text",
-text:`🔵 ${totalBlue.toLocaleString()}`
+text:`🔵 น้ำเงิน ${totalBlue.toLocaleString()}`
+},
+{
+type:"separator",
+margin:"md"
+},
+{
+type:"text",
+text:`ราคา 🔴${rateRed} / 🔵${rateBlue}`
 }
 ]
 }
@@ -190,6 +237,7 @@ text:`🔵 ${totalBlue.toLocaleString()}`
 });
 }
 
+// =====================
 function reply(event,text){
 return client.replyMessage(
 event.replyToken,{
@@ -198,7 +246,8 @@ text
 });
 }
 
+// =====================
 app.listen(
-process.env.PORT || 3000,
-()=>console.log("✅ BOT RUNNING")
+process.env.PORT||3000,
+()=>console.log("✅ BOT RUNNING PRO MAX")
 );

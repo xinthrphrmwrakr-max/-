@@ -14,37 +14,41 @@ const client = new line.Client(config);
 const ADMIN_ID = "U3bb879084521bbe454c63a2fb7d56c64";
 
 // ================= TABLE =================
-let tableOpen = false;
-let rateRed = 0;
-let rateBlue = 0;
+let tableOpen=false;
+let rateRed=0;
+let rateBlue=0;
 
-const MAX_TABLE = 100000; // ✅ โต๊ะเต็ม
+const MAX_TABLE=100000;
+const MAX_USER_BET=20000;
 
-let users = {};
-let bets = [];
+let users={};
+let bets=[];
 
-let totalRed = 0;
-let totalBlue = 0;
+let totalRed=0;
+let totalBlue=0;
+
 
 // ================= USER =================
 function getUser(id,name){
-  if(!users[id]){
-    users[id]={
-      name,
-      credit:20000,
-      betTotal:0
-    };
-  }
-  return users[id];
+if(!users[id]){
+users[id]={
+name,
+credit:20000,
+roundBet:0
+};
 }
+return users[id];
+}
+
 
 // ================= WEBHOOK =================
 app.post("/webhook",
 line.middleware(config),
 async(req,res)=>{
 await Promise.all(req.body.events.map(handleEvent));
-res.end();
+res.status(200).end();
 });
+
 
 // ================= MAIN =================
 async function handleEvent(event){
@@ -64,7 +68,7 @@ const isAdmin=
 event.source.userId===ADMIN_ID;
 
 
-// ================= CREDIT =================
+// ========= CREDIT =========
 if(text.toLowerCase()==="c"){
 return reply(event,
 `${user.name}
@@ -72,13 +76,16 @@ return reply(event,
 }
 
 
-// ================= OPEN RATE =================
+// ========= OPEN RATE =========
 const open=text.match(/^\/open\s(\d+)\s(\d+)/);
 
 if(isAdmin && open){
-rateRed=open[1];
-rateBlue=open[2];
+
+rateRed=parseInt(open[1]);
+rateBlue=parseInt(open[2]);
 tableOpen=true;
+
+resetRound();
 
 return reply(event,
 `🔥 เปิดราคา
@@ -87,19 +94,21 @@ return reply(event,
 }
 
 
-// ================= BET =================
+// ========= BET =========
 const bet=text.match(/^(ด|ง)\s?(\d+)/i);
 if(!bet) return;
 
 if(!tableOpen)
-return reply(event,"🚫 ยังไม่เปิดโต๊ะ");
+return reply(event,"🚫 ปิดรับแทง");
 
 const amount=parseInt(bet[2]);
 
 if(user.credit<amount)
 return reply(event,"❌ เครดิตไม่พอ");
 
-// ✅ โต๊ะเต็ม AUTO
+if(user.roundBet+amount>MAX_USER_BET)
+return reply(event,"⚠️ เกินวงเงินต่อคน");
+
 if(totalRed+totalBlue+amount>MAX_TABLE){
 tableOpen=false;
 return reply(event,"🛑 โต๊ะเต็ม AUTO");
@@ -109,7 +118,7 @@ const team=
 bet[1]==="ด"?"แดง":"น้ำเงิน";
 
 user.credit-=amount;
-user.betTotal+=amount;
+user.roundBet+=amount;
 
 bets.push({
 id:event.source.userId,
@@ -122,21 +131,72 @@ team==="แดง"
 ?totalRed+=amount
 :totalBlue+=amount;
 
-// ✅ FLEX สด
 return replyFlex(event);
+
+
+// ========= RESULT =========
+if(isAdmin && text==="/แดงชนะ"){
+await payWinner("แดง");
+return reply(event,"🏆 แดงชนะ จ่ายแล้ว");
+}
+
+if(isAdmin && text==="/น้ำเงินชนะ"){
+await payWinner("น้ำเงิน");
+return reply(event,"🏆 น้ำเงินชนะ จ่ายแล้ว");
+}
+
 }
 
 
-// ================= FLEX LIVE =================
+// ================= PAY =================
+async function payWinner(winner){
+
+bets.forEach(b=>{
+
+if(b.team===winner){
+
+const user=users[b.id];
+
+const rate=
+winner==="แดง"
+?rateRed
+:rateBlue;
+
+const win=
+Math.floor(b.amount*rate/10);
+
+user.credit+=b.amount+win;
+}
+});
+
+tableOpen=false;
+resetRound();
+}
+
+
+// ================= RESET =================
+function resetRound(){
+
+bets=[];
+totalRed=0;
+totalBlue=0;
+
+Object.values(users)
+.forEach(u=>u.roundBet=0);
+}
+
+
+// ================= FLEX =================
 function replyFlex(event){
 
-const top=
+const ranking=
 Object.values(users)
-.sort((a,b)=>b.betTotal-a.betTotal)
+.filter(u=>u.roundBet>0)
+.sort((a,b)=>b.roundBet-a.roundBet)
 .slice(0,5)
 .map((u,i)=>
-`${i+1}. ${u.name} ${u.betTotal.toLocaleString()}`
-).join("\n");
+`${i+1}. ${u.name} ${u.roundBet.toLocaleString()}`
+).join("\n")||"-";
 
 return client.replyMessage(
 event.replyToken,{
@@ -166,62 +226,19 @@ text:`🔵 ${totalBlue.toLocaleString()}`
 type:"text",
 text:`ราคา ${rateRed}/${rateBlue}`
 },
-{
-type:"separator",
-margin:"md"
-},
+{type:"separator"},
 {
 type:"text",
 text:"🏆 อันดับนักแทง"
 },
 {
 type:"text",
-text:top||"-"
+text:ranking
 }
 ]
 }
 }
 });
-}
-
-
-// ================= RESULT =================
-async function payWinner(winner){
-
-bets.forEach(b=>{
-
-if(b.team===winner){
-
-const user=users[b.id];
-
-const rate=
-winner==="แดง"
-?rateRed
-:rateBlue;
-
-const win=
-Math.floor(b.amount*rate/10);
-
-user.credit+=b.amount+win;
-}
-});
-
-bets=[];
-totalRed=0;
-totalBlue=0;
-tableOpen=false;
-}
-
-
-// ================= ADMIN RESULT =================
-if(isAdmin && text==="/แดงชนะ"){
-payWinner("แดง");
-return reply(event,"🏆 แดงชนะ จ่ายแล้ว");
-}
-
-if(isAdmin && text==="/น้ำเงินชนะ"){
-payWinner("น้ำเงิน");
-return reply(event,"🏆 น้ำเงินชนะ จ่ายแล้ว");
 }
 
 
@@ -235,5 +252,5 @@ event.replyToken,
 
 app.listen(
 process.env.PORT||3000,
-()=>console.log("✅ BOT PRO RUNNING")
+()=>console.log("✅ BOT PRO MAX RUNNING")
 );

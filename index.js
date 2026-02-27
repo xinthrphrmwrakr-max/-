@@ -42,11 +42,21 @@ return users[id];
 
 
 // ================= WEBHOOK =================
-app.post("/webhook",
+app.post(
+"/webhook",
 line.middleware(config),
-async(req,res)=>{
-await Promise.all(req.body.events.map(handleEvent));
+async (req,res)=>{
+
+try{
+await Promise.all(
+req.body.events.map(handleEvent)
+);
 res.status(200).end();
+
+}catch(err){
+console.log("ERROR:",err);
+res.status(200).end();
+}
 });
 
 

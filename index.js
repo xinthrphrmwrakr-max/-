@@ -11,13 +11,12 @@ const config = {
 const client = new line.Client(config);
 
 // =====================
-// ✅ ตั้งค่าโต๊ะ
+// ✅ ADMIN USER ID
 // =====================
+const ADMIN_ID = "U3bb879084521bbe454c63a2fb7d56c64"; // Uxxxxxxxx
 
-const ADMIN_ID = "5bd5a4a0980d497b71e4eae7d217d1cf";
-
+// =====================
 let tableOpen = false;
-let tableLimit = 100000;
 
 let users = {};
 let bets = [];
@@ -38,12 +37,21 @@ function getUser(id, name) {
 }
 
 // =====================
-
-app.post("/webhook",
+// ✅ WEBHOOK FIX 502
+// =====================
+app.post(
+  "/webhook",
   line.middleware(config),
-  (req, res) => {
-    Promise.all(req.body.events.map(handleEvent));
-    res.sendStatus(200);
+  async (req, res) => {
+    try {
+      await Promise.all(
+        req.body.events.map(handleEvent)
+      );
+      res.status(200).end();
+    } catch (err) {
+      console.log(err);
+      res.status(200).end();
+    }
   }
 );
 
@@ -52,65 +60,70 @@ app.post("/webhook",
 async function handleEvent(event) {
 
   if (event.type !== "message") return;
+  if (event.message.type !== "text") return;
 
   const text = event.message.text.trim();
 
   const profile =
-    await client.getProfile(event.source.userId);
+    await client.getProfile(
+      event.source.userId
+    );
 
   const user =
-    getUser(event.source.userId,
-    profile.displayName);
+    getUser(
+      event.source.userId,
+      profile.displayName
+    );
 
   const isAdmin =
     event.source.userId === ADMIN_ID;
 
   // =====================
-  // ✅ ADMIN COMMAND
+  // ✅ ADMIN
   // =====================
 
   if (isAdmin && text === "/เปิดโต๊ะ") {
     tableOpen = true;
-    return reply(event, "✅ เปิดรับแทงแล้ว");
+    return reply(event,"✅ เปิดรับแทง");
   }
 
   if (isAdmin && text === "/ปิดโต๊ะ") {
     tableOpen = false;
-    return reply(event, "🚫 ปิดรับแทง");
+    return reply(event,"🚫 ปิดโต๊ะ");
   }
 
   if (isAdmin && text === "/ล้างโต๊ะ") {
-    bets = [];
-    totalRed = 0;
-    totalBlue = 0;
-    return reply(event, "♻️ ล้างโต๊ะแล้ว");
+    bets=[];
+    totalRed=0;
+    totalBlue=0;
+    return reply(event,"♻️ ล้างแล้ว");
   }
 
   if (isAdmin && text === "/ยกใหม่") {
-    bets = [];
-    totalRed = 0;
-    totalBlue = 0;
-    tableOpen = true;
-    return reply(event, "🔥 เปิดยกใหม่");
+    bets=[];
+    totalRed=0;
+    totalBlue=0;
+    tableOpen=true;
+    return reply(event,"🔥 เปิดยกใหม่");
   }
 
   if (text === "/สรุป")
     return replyFlex(event);
 
   // =====================
-  // ✅ แทง ด1000 ง500
+  // ✅ ด100 / ง500
   // =====================
 
   const betMatch =
-    text.match(/^(ด|ง)(\d+)/i);
+    text.match(/^(ด|ง)\s?(\d+)/i);
 
   if (!betMatch) return;
 
   if (!tableOpen)
-    return reply(event, "🚫 ยังไม่เปิดโต๊ะ");
+    return reply(event,"🚫 ยังไม่เปิดโต๊ะ");
 
-  let side = betMatch[1];
-  let amount =
+  const side = betMatch[1];
+  const amount =
     parseInt(betMatch[2]);
 
   if (user.credit < amount)
@@ -118,8 +131,10 @@ async function handleEvent(event) {
 
   user.credit -= amount;
 
-  let team =
-    side === "ด" ? "แดง" : "น้ำเงิน";
+  const team =
+    side === "ด"
+      ? "แดง"
+      : "น้ำเงิน";
 
   bets.push({
     name:user.name,
@@ -127,27 +142,28 @@ async function handleEvent(event) {
     amount
   });
 
-  if (team==="แดง")
+  if(team==="แดง")
     totalRed+=amount;
   else
     totalBlue+=amount;
 
-  return reply(event,
+  return reply(
+    event,
 `${user.name}
 ${team} ${amount.toLocaleString()} บ. ✅ติด
-คงเหลือ ${user.credit.toLocaleString()} 💰`);
+คงเหลือ ${user.credit.toLocaleString()} 💰`
+  );
 }
 
 // =====================
-// ✅ FLEX SUMMARY
+// ✅ FLEX
 // =====================
 
 function replyFlex(event){
-
 return client.replyMessage(
 event.replyToken,{
 type:"flex",
-altText:"สรุปโต๊ะ",
+altText:"summary",
 contents:{
 type:"bubble",
 body:{
@@ -156,25 +172,23 @@ layout:"vertical",
 contents:[
 {
 type:"text",
-text:"📊 สรุปยอดเดิมพัน",
+text:"📊 สรุปโต๊ะ",
 weight:"bold",
 size:"lg"
 },
 {
 type:"text",
-text:`🔴 แดง ${totalRed.toLocaleString()}`
+text:`🔴 ${totalRed.toLocaleString()}`
 },
 {
 type:"text",
-text:`🔵 น้ำเงิน ${totalBlue.toLocaleString()}`
+text:`🔵 ${totalBlue.toLocaleString()}`
 }
 ]
 }
 }
 });
 }
-
-// =====================
 
 function reply(event,text){
 return client.replyMessage(
@@ -184,4 +198,7 @@ text
 });
 }
 
-app.listen(process.env.PORT||3000);
+app.listen(
+process.env.PORT || 3000,
+()=>console.log("✅ BOT RUNNING")
+);

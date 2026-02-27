@@ -16,7 +16,7 @@ let bets = [];
 let currentGame = null;
 
 // 👑 ใส่ USER ID แอดมิน
-const ADMINS = ["ใส่_userId_คุณตรงนี้"];
+const ADMINS = ["U3bb879084521bbe454c63a2fb7d56c64"];
 
 app.post('/webhook', line.middleware(config), async (req, res) => {
 

@@ -27,22 +27,39 @@ app.post('/webhook', line.middleware(config), async (req, res) => {
       const userId = event.source.userId;
       const text = event.message.text.trim();
 
-      console.log("ข้อความเข้า:", text);
-      console.log("source type:", event.source.type);
+      // 🔥 ดึงชื่อผู้ใช้
+      let displayName = "ผู้ใช้";
+
+      try {
+        if (event.source.type === "group") {
+          const profile = await client.getGroupMemberProfile(
+            event.source.groupId,
+            userId
+          );
+          displayName = profile.displayName;
+        } else {
+          const profile = await client.getProfile(userId);
+          displayName = profile.displayName;
+        }
+      } catch (err) {
+        console.log("ดึงชื่อไม่สำเร็จ ใช้ค่า default");
+      }
+
+      console.log("ข้อความเข้า:", text, "จาก:", displayName);
 
       if (!users[userId]) {
         users[userId] = { balance: 10000 };
       }
 
-      // เช็คยอดเงิน
+      // 💰 เช็คยอด
       if (text.toLowerCase() === 'c') {
         return client.replyMessage(event.replyToken, {
           type: 'text',
-          text: `ยอดเงินของคุณ: ${users[userId].balance}`
+          text: `${displayName} ยอดเงินของคุณ: ${users[userId].balance}`
         });
       }
 
-      // เปิดรอบ
+      // 🟢 เปิดรอบ
       if (text.startsWith('/open')) {
         const parts = text.split(' ');
 
@@ -64,41 +81,49 @@ app.post('/webhook', line.middleware(config), async (req, res) => {
 
         return client.replyMessage(event.replyToken, {
           type: 'text',
-          text: `เปิดรับเดิมพัน\n${parts[1]} vs ${parts[2]}\nราคา ${parts[3]}`
+          text: `📢 ${displayName} เปิดรับเดิมพัน\n${parts[1]} vs ${parts[2]}\nราคา ${parts[3]}`
         });
       }
 
-      // แทง
+      // 🎯 แทง
       if (currentGame && currentGame.open) {
         const parts = text.split(' ');
         const team = parts[0];
         const amount = parseInt(parts[1]);
 
         if ((team === currentGame.teamA || team === currentGame.teamB) && amount > 0) {
+
           if (users[userId].balance >= amount) {
 
             users[userId].balance -= amount;
-            bets.push({ userId, team, amount });
+            bets.push({ userId, team, amount, name: displayName });
 
             return client.replyMessage(event.replyToken, {
               type: 'text',
-              text: `แทง ${team} ${amount} สำเร็จ`
+              text: `✅ ${displayName} แทง ${team} ${amount} สำเร็จ`
             });
+
           } else {
             return client.replyMessage(event.replyToken, {
               type: 'text',
-              text: `ยอดเงินไม่พอ`
+              text: `❌ ${displayName} ยอดเงินไม่พอ`
             });
           }
         }
       }
 
-      // ดูรายการแทง
+      // 📋 ดูรายการแทง
       if (text === '/list') {
-        let summary = 'สรุปการเดิมพัน\n';
+        if (bets.length === 0) {
+          return client.replyMessage(event.replyToken, {
+            type: 'text',
+            text: 'ยังไม่มีรายการแทง'
+          });
+        }
 
+        let summary = '📊 สรุปการเดิมพัน\n';
         bets.forEach(b => {
-          summary += `${b.team} ${b.amount}\n`;
+          summary += `${b.name} → ${b.team} ${b.amount}\n`;
         });
 
         return client.replyMessage(event.replyToken, {
@@ -107,7 +132,7 @@ app.post('/webhook', line.middleware(config), async (req, res) => {
         });
       }
 
-      // ปิดรอบ
+      // 🔴 ปิดรอบ
       if (text.startsWith('/close')) {
         const winner = text.split(' ')[1];
 
@@ -122,14 +147,14 @@ app.post('/webhook', line.middleware(config), async (req, res) => {
 
         return client.replyMessage(event.replyToken, {
           type: 'text',
-          text: `ปิดรอบแล้ว\nผู้ชนะ: ${winner}`
+          text: `🏆 ${displayName} ปิดรอบแล้ว\nผู้ชนะ: ${winner}`
         });
       }
 
-      // ถ้าไม่เข้าเงื่อนไขไหนเลย
+      // ถ้าไม่เข้าเงื่อนไขไหน
       return client.replyMessage(event.replyToken, {
         type: 'text',
-        text: `ได้รับข้อความ: ${text}`
+        text: `${displayName} พิมพ์ว่า: ${text}`
       });
 
     }));

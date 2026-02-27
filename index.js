@@ -18,7 +18,7 @@ let tableOpen=false;
 let rateRed=0;
 let rateBlue=0;
 
-const MAX_TABLE=100000;
+const MAX_TABLE=10000;
 const MAX_USER_BET=20000;
 
 let users={};

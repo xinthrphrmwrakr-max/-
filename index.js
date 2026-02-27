@@ -1,199 +1,96 @@
-const express = require('express');
-const line = require('@line/bot-sdk');
+const express = require("express");
+const line = require("@line/bot-sdk");
 
 const app = express();
 
 const config = {
-  channelSecret: process.env.CHANNEL_SECRET,
-  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN
+  channelAccessToken: "ใส่ Channel Access Token",
+  channelSecret: "ใส่ Channel Secret"
 };
 
 const client = new line.Client(config);
 
-// ===== DATABASE =====
+app.post("/webhook", line.middleware(config), (req, res) => {
+  Promise
+    .all(req.body.events.map(handleEvent))
+    .then(() => res.json({ status: "ok" }));
+});
+
+// ======================
+// ✅ ระบบโต๊ะ
+// ======================
+
 let users = {};
-let bets = [];
-let currentGame = null;
+let tableLimit = 50000; // โต๊ะเต็ม
+let totalBet = 0;
 
-// 👑 ใส่ USER ID แอดมิน
-const ADMINS = ["U3bb879084521bbe454c63a2fb7d56c64"];
-
-app.post('/webhook', line.middleware(config), async (req, res) => {
-
-  const events = req.body.events;
-
-  await Promise.all(events.map(async (event) => {
-
-    if (event.type !== 'message' || event.message.type !== 'text')
-      return;
-
-    const userId = event.source.userId;
-    const text = event.message.text.trim();
-
-    // ===== ดึงชื่อ =====
-    let name = "ผู้เล่น";
-
-    try {
-      if (event.source.type === "group") {
-        const profile =
-          await client.getGroupMemberProfile(
-            event.source.groupId,
-            userId
-          );
-        name = profile.displayName;
-      }
-    } catch {}
-
-    if (!users[userId])
-      users[userId] = { balance: 20000 };
-
-    // =========================
-    // 💰 เครดิต
-    // =========================
-    if (text === "c") {
-      return client.replyMessage(event.replyToken,{
-        type:'text',
-        text:`${name}\nเครดิต ${users[userId].balance.toLocaleString()} 💰`
-      });
-    }
-
-    // =========================
-    // 👑 เปิดโต๊ะ
-    // =========================
-    if (text.startsWith("/open")) {
-
-      if (!ADMINS.includes(userId))
-        return;
-
-      const p = text.split(" ");
-
-      currentGame = {
-        teamA:p[1],
-        teamB:p[2],
-        rate:p[3],
-        open:true
-      };
-
-      bets=[];
-
-      return client.replyMessage(event.replyToken,{
-        type:'text',
-        text:
-`📢 เปิดโต๊ะแล้ว
-${p[1]} 🆚 ${p[2]}
-ราคา ${p[3]}`
-      });
-    }
-
-    // =========================
-    // 🎯 แทง
-    // =========================
-if (currentGame && currentGame.open) {
-
-  const match = text.match(/^([ดง])\s*(\d+)/i);
-  if (!match) return;
-
-  const shortTeam = match[1];
-  const amount = parseInt(match[2]);
-
-  const team =
-    shortTeam === "ด"
-      ? currentGame.teamA
-      : currentGame.teamB;
-
-  if (users[userId].balance < amount) {
-    return client.replyMessage(event.replyToken,{
-      type:'text',
-      text:`${name}\n❌ เครดิตไม่พอ`
-    });
+function getUser(id, name) {
+  if (!users[id]) {
+    users[id] = {
+      name: name,
+      credit: 20000
+    };
   }
+  return users[id];
+}
 
-  users[userId].balance -= amount;
+// ======================
+// ✅ HANDLE EVENT
+// ======================
 
-  bets.push({
-    userId,
-    name,
-    team,
-    amount
-  });
+async function handleEvent(event) {
 
-  return client.replyMessage(event.replyToken,{
-    type:'text',
-text:
-`${name}
+  if (event.type !== "message" || event.message.type !== "text")
+    return null;
+
+  const text = event.message.text.trim();
+
+  const profile = await client.getProfile(event.source.userId);
+  const user = getUser(event.source.userId, profile.displayName);
+
+  // ======================
+  // ✅ ด1000 / ง500
+  // ======================
+
+  const betMatch = text.match(/^(ด|ง)(\d+)/i);
+
+  if (!betMatch) return null; // ❌ ไม่ตอบแชททั่วไป
+
+  let side = betMatch[1];
+  let amount = parseInt(betMatch[2]);
+
+  if (amount <= 0)
+    return reply(event.replyToken, "❌ จำนวนไม่ถูกต้อง");
+
+  if (user.credit < amount)
+    return reply(event.replyToken, "❌ เครดิตไม่พอ");
+
+  if (totalBet + amount > tableLimit)
+    return reply(event.replyToken, "🚫 โต๊ะเต็มแล้ว");
+
+  // หักเงิน
+  user.credit -= amount;
+  totalBet += amount;
+
+  let team = side === "ด" ? "แดง" : "น้ำเงิน";
+
+  let msg =
+`${user.name}
 ${team} ${amount.toLocaleString()} บ. ✅ติด
-คงเหลือ ${users[userId].balance.toLocaleString()} 💰`
+คงเหลือ ${user.credit.toLocaleString()} 💰`;
+
+  return reply(event.replyToken, msg);
+}
+
+// ======================
+// ✅ Reply
+// ======================
+
+function reply(token, text) {
+  return client.replyMessage(token, {
+    type: "text",
+    text: text
   });
 }
 
-        users[userId].balance-=amount;
-
-        bets.push({
-          userId,
-          name,
-          team,
-          amount
-        });
-
-        return client.replyMessage(event.replyToken,{
-          type:'text',
-text:
-`${name}
-${team} ${amount.toLocaleString()} บ. ✅ติด
-คงเหลือ ${users[userId].balance.toLocaleString()} 💰`
-        });
-      }
-    }
-
-    // =========================
-    // 📊 รวมยอด
-    // =========================
-    if(text==="/sum"){
-
-      let a=0,b=0;
-
-      bets.forEach(x=>{
-        if(x.team===currentGame.teamA) a+=x.amount;
-        if(x.team===currentGame.teamB) b+=x.amount;
-      });
-
-      return client.replyMessage(event.replyToken,{
-        type:'text',
-text:
-`📊 ยอดรวม
-${currentGame.teamA} : ${a.toLocaleString()}
-${currentGame.teamB} : ${b.toLocaleString()}`
-      });
-    }
-
-    // =========================
-    // 🏆 ปิดโต๊ะ
-    // =========================
-    if(text.startsWith("/close")){
-
-      if(!ADMINS.includes(userId))
-        return;
-
-      const win=text.split(" ")[1];
-
-      bets.forEach(b=>{
-        if(b.team===win){
-          const pay=b.amount*1.9;
-          users[b.userId].balance+=pay;
-        }
-      });
-
-      currentGame.open=false;
-
-      return client.replyMessage(event.replyToken,{
-        type:'text',
-        text:`🏆 ${win} ชนะ\nจ่ายเงินเรียบร้อย`
-      });
-    }
-
-  }));
-
-  res.sendStatus(200);
-});
-
-app.listen(process.env.PORT||3000);
+app.listen(process.env.PORT || 3000);

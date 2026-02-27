@@ -70,15 +70,39 @@ if(event.message.type!=="text") return;
 const text =
 event.message.text.trim();
 
+let name = "ผู้เล่น";
+
+try {
+
+if(event.source.type === "group"){
+
+const profile =
+await client.getGroupMemberProfile(
+event.source.groupId,
+event.source.userId
+);
+
+name = profile.displayName;
+
+}else{
+
 const profile =
 await client.getProfile(
 event.source.userId
 );
 
+name = profile.displayName;
+
+}
+
+}catch(e){
+console.log("get name fail");
+}
+
 const user =
 getUser(
 event.source.userId,
-profile.displayName
+name
 );
 
 const isAdmin =

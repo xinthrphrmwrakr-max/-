@@ -10,165 +10,171 @@ const config = {
 
 const client = new line.Client(config);
 
+// ===== DATABASE =====
 let users = {};
 let bets = [];
 let currentGame = null;
 
+// 👑 ใส่ USER ID แอดมิน
+const ADMINS = ["ใส่_userId_คุณตรงนี้"];
+
 app.post('/webhook', line.middleware(config), async (req, res) => {
-  try {
-    const events = req.body.events;
 
-    await Promise.all(events.map(async (event) => {
+  const events = req.body.events;
 
-      if (event.type !== 'message' || event.message.type !== 'text') {
-        return;
-      }
+  await Promise.all(events.map(async (event) => {
 
-      const userId = event.source.userId;
-      const text = event.message.text.trim();
+    if (event.type !== 'message' || event.message.type !== 'text')
+      return;
 
-      // 🔥 ดึงชื่อผู้ใช้
-      let displayName = "ผู้ใช้";
+    const userId = event.source.userId;
+    const text = event.message.text.trim();
 
-      try {
-        if (event.source.type === "group") {
-          const profile = await client.getGroupMemberProfile(
+    // ===== ดึงชื่อ =====
+    let name = "ผู้เล่น";
+
+    try {
+      if (event.source.type === "group") {
+        const profile =
+          await client.getGroupMemberProfile(
             event.source.groupId,
             userId
           );
-          displayName = profile.displayName;
-        } else {
-          const profile = await client.getProfile(userId);
-          displayName = profile.displayName;
-        }
-      } catch (err) {
-        console.log("ดึงชื่อไม่สำเร็จ ใช้ค่า default");
+        name = profile.displayName;
       }
+    } catch {}
 
-      console.log("ข้อความเข้า:", text, "จาก:", displayName);
+    if (!users[userId])
+      users[userId] = { balance: 20000 };
 
-      if (!users[userId]) {
-        users[userId] = { balance: 10000 };
-      }
+    // =========================
+    // 💰 เครดิต
+    // =========================
+    if (text === "c") {
+      return client.replyMessage(event.replyToken,{
+        type:'text',
+        text:`${name}\nเครดิต ${users[userId].balance.toLocaleString()} 💰`
+      });
+    }
 
-      // 💰 เช็คยอด
-      if (text.toLowerCase() === 'c') {
-        return client.replyMessage(event.replyToken, {
-          type: 'text',
-          text: `${displayName} ยอดเงินของคุณ: ${users[userId].balance}`
-        });
-      }
+    // =========================
+    // 👑 เปิดโต๊ะ
+    // =========================
+    if (text.startsWith("/open")) {
 
-      // 🟢 เปิดรอบ
-      if (text.startsWith('/open')) {
-        const parts = text.split(' ');
+      if (!ADMINS.includes(userId))
+        return;
 
-        if (parts.length < 4) {
-          return client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: 'รูปแบบ: /open ทีมA ทีมB ราคา'
+      const p = text.split(" ");
+
+      currentGame = {
+        teamA:p[1],
+        teamB:p[2],
+        rate:p[3],
+        open:true
+      };
+
+      bets=[];
+
+      return client.replyMessage(event.replyToken,{
+        type:'text',
+        text:
+`📢 เปิดโต๊ะแล้ว
+${p[1]} 🆚 ${p[2]}
+ราคา ${p[3]}`
+      });
+    }
+
+    // =========================
+    // 🎯 แทง
+    // =========================
+    if(currentGame && currentGame.open){
+
+      const p=text.split(" ");
+      const team=p[0];
+      const amount=parseInt(p[1]);
+
+      if(
+        (team===currentGame.teamA ||
+         team===currentGame.teamB)
+         && amount>0
+      ){
+
+        if(users[userId].balance<amount){
+          return client.replyMessage(event.replyToken,{
+            type:'text',
+            text:`${name}\n❌ เครดิตไม่พอ`
           });
         }
 
-        currentGame = {
-          teamA: parts[1],
-          teamB: parts[2],
-          rate: parts[3],
-          open: true
-        };
+        users[userId].balance-=amount;
 
-        bets = [];
+        bets.push({
+          userId,
+          name,
+          team,
+          amount
+        });
 
-        return client.replyMessage(event.replyToken, {
-          type: 'text',
-          text: `📢 ${displayName} เปิดรับเดิมพัน\n${parts[1]} vs ${parts[2]}\nราคา ${parts[3]}`
+        return client.replyMessage(event.replyToken,{
+          type:'text',
+text:
+`${name}
+${team} ${amount.toLocaleString()} บ. ✅ติด
+คงเหลือ ${users[userId].balance.toLocaleString()} 💰`
         });
       }
+    }
 
-      // 🎯 แทง
-      if (currentGame && currentGame.open) {
-        const parts = text.split(' ');
-        const team = parts[0];
-        const amount = parseInt(parts[1]);
+    // =========================
+    // 📊 รวมยอด
+    // =========================
+    if(text==="/sum"){
 
-        if ((team === currentGame.teamA || team === currentGame.teamB) && amount > 0) {
+      let a=0,b=0;
 
-          if (users[userId].balance >= amount) {
-
-            users[userId].balance -= amount;
-            bets.push({ userId, team, amount, name: displayName });
-
-            return client.replyMessage(event.replyToken, {
-              type: 'text',
-              text: `✅ ${displayName} แทง ${team} ${amount} สำเร็จ`
-            });
-
-          } else {
-            return client.replyMessage(event.replyToken, {
-              type: 'text',
-              text: `❌ ${displayName} ยอดเงินไม่พอ`
-            });
-          }
-        }
-      }
-
-      // 📋 ดูรายการแทง
-      if (text === '/list') {
-        if (bets.length === 0) {
-          return client.replyMessage(event.replyToken, {
-            type: 'text',
-            text: 'ยังไม่มีรายการแทง'
-          });
-        }
-
-        let summary = '📊 สรุปการเดิมพัน\n';
-        bets.forEach(b => {
-          summary += `${b.name} → ${b.team} ${b.amount}\n`;
-        });
-
-        return client.replyMessage(event.replyToken, {
-          type: 'text',
-          text: summary
-        });
-      }
-
-      // 🔴 ปิดรอบ
-      if (text.startsWith('/close')) {
-        const winner = text.split(' ')[1];
-
-        bets.forEach(b => {
-          if (b.team === winner) {
-            const profit = b.amount * 0.9;
-            users[b.userId].balance += b.amount + profit;
-          }
-        });
-
-        if (currentGame) currentGame.open = false;
-
-        return client.replyMessage(event.replyToken, {
-          type: 'text',
-          text: `🏆 ${displayName} ปิดรอบแล้ว\nผู้ชนะ: ${winner}`
-        });
-      }
-
-      // ถ้าไม่เข้าเงื่อนไขไหน
-      return client.replyMessage(event.replyToken, {
-        type: 'text',
-        text: `${displayName} พิมพ์ว่า: ${text}`
+      bets.forEach(x=>{
+        if(x.team===currentGame.teamA) a+=x.amount;
+        if(x.team===currentGame.teamB) b+=x.amount;
       });
 
-    }));
+      return client.replyMessage(event.replyToken,{
+        type:'text',
+text:
+`📊 ยอดรวม
+${currentGame.teamA} : ${a.toLocaleString()}
+${currentGame.teamB} : ${b.toLocaleString()}`
+      });
+    }
 
-    res.sendStatus(200);
+    // =========================
+    // 🏆 ปิดโต๊ะ
+    // =========================
+    if(text.startsWith("/close")){
 
-  } catch (err) {
-    console.error("ERROR:", err);
-    res.sendStatus(500);
-  }
+      if(!ADMINS.includes(userId))
+        return;
+
+      const win=text.split(" ")[1];
+
+      bets.forEach(b=>{
+        if(b.team===win){
+          const pay=b.amount*1.9;
+          users[b.userId].balance+=pay;
+        }
+      });
+
+      currentGame.open=false;
+
+      return client.replyMessage(event.replyToken,{
+        type:'text',
+        text:`🏆 ${win} ชนะ\nจ่ายเงินเรียบร้อย`
+      });
+    }
+
+  }));
+
+  res.sendStatus(200);
 });
 
-app.get('/', (req, res) => {
-  res.send('Bot is running 🚀');
-});
-
-app.listen(process.env.PORT || 3000);
+app.listen(process.env.PORT||3000);

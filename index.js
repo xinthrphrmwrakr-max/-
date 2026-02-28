@@ -14,9 +14,11 @@ channelSecret:"5bd5a4a0980d497b71e4eae7d217d1cf"
 
 const client=new line.Client(config);
 
-mongoose.connect(
-"mongodb://127.0.0.1/linetable"
-);
+require("dotenv").config();
+
+mongoose.connect(process.env.MONGO_URI)
+.then(() => console.log("Mongo Connected"))
+.catch(err => console.log(err));
 
 const ADMIN="U3bb879084521bbe454c63a2fb7d56c64";
 const GROUP_ID="GROUP_ID";

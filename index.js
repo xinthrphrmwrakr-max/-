@@ -16,7 +16,6 @@ const config = {
 
 const client=new line.Client(config);
 
-
 mongoose.connect(process.env.MONGO_URI)
 .then(() => console.log("Mongo Connected"))
 .catch(err => console.log(err));

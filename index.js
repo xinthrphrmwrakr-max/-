@@ -1,20 +1,21 @@
-const express=require("express");
-const line=require("@line/bot-sdk");
-const mongoose=require("mongoose");
+require('dotenv').config();
+
+const express = require("express");
+const line = require("@line/bot-sdk");
+const mongoose = require("mongoose");
 
 const User=require("./models/User");
 const Table=require("./models/Table");
 
 const app=express();
 
-const config={
-channelAccessToken:"rULcYwAsV4CS7pD4hWcQvNTvxt3wHIXGjVUfCQFN6rYJkn49wc2jG8EPaqJxJToqmETEO04/zAjuu4RojiWR/SRZFzTBMpQEeBpgYQbDJ2Sr63x4Ia2wu8vfSR9dkgZyur7SI4f56PN0LHSuen+EpwdB04t89/1O/w1cDnyilFU=",
-channelSecret:"5bd5a4a0980d497b71e4eae7d217d1cf"
+const config = {
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.CHANNEL_SECRET
 };
 
 const client=new line.Client(config);
 
-require("dotenv").config();
 
 mongoose.connect(process.env.MONGO_URI)
 .then(() => console.log("Mongo Connected"))

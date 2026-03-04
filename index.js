@@ -5,7 +5,8 @@ const line=require("@line/bot-sdk");
 const mongoose=require("mongoose");
 
 const User=require("./models/User");
-const Table=require("./models/Table");
+const Fight=require("./models/Fight");
+const Bet=require("./models/Bet");
 
 const app=express();
 
@@ -19,288 +20,41 @@ const client=new line.Client(config);
 mongoose.connect(process.env.MONGO_URI)
 .then(()=>console.log("✅ Mongo Connected"));
 
-const ADMIN="U3bb879084521bbe454c63a2fb7d56c64";
-const GROUP_ID="Cbe4b98d3adcc05e91341e544ef99ba5d";
-
-
-// ================= TABLE =================
-async function getTable(){
-
-let t=await Table.findOne();
-
-if(!t){
-t=await Table.create({
-open:false,
-limit:0,
-bets:[]
-});
-}
-
-return t;
-}
-
-
-// ================= USER =================
-async function getUser(id,name){
-
-let u=await User.findOne({userId:id});
-
-if(!u){
-u=await User.create({
-userId:id,
-name,
-credit:0
-});
-}
-
-return u;
-}
-
+const ADMIN="ใส่USER_ID";
+const GROUP_ID="ใส่GROUP_ID";
 
 // ================= WEBHOOK =================
 app.post("/webhook",
 line.middleware(config),
-(req,res)=>{
-Promise
-.all(req.body.events.map(handleEvent))
-.then(()=>res.sendStatus(200))
-.catch(()=>res.sendStatus(500));
+async(req,res)=>{
+await Promise.all(req.body.events.map(handleEvent));
+res.json({});
 });
 
+// ================= RATE =================
+function calcPay(rate,amount){
 
-// ================= MAIN =================
-async function handleEvent(event){
-
-if(event.type!=="message")return;
-if(event.message.type!=="text")return;
-
-if(
-event.source.type==="group" &&
-event.source.groupId!==GROUP_ID
-)return;
-
-const text=event.message.text.trim();
-
-
-// ===== SAFE PROFILE =====
-let name="User";
-
-try{
-const p=await client.getGroupMemberProfile(
-event.source.groupId,
-event.source.userId
-);
-name=p.displayName;
-}catch{}
-
-const user=await getUser(event.source.userId,name);
-const table=await getTable();
-
-const isAdmin=event.source.userId===ADMIN;
-
-
-// ================= CREDIT =================
-if(text==="c")
-return reply(event,
-`${user.name}\n💰 ${user.credit}`);
-
-
-// ================= OPEN =================
-if(isAdmin && text.startsWith("/เปิดโต๊ะ")){
-
-const sp=text.split(" ");
-
-table.open=true;
-table.limit=parseInt(sp[3]);
-table.bets=[];
-
-await table.save();
-
-return pushFlex();
+const r=rate.split("/");
+return amount*(parseFloat(r[0])/parseFloat(r[1]));
 }
-
-
-// ================= CLOSE =================
-if(isAdmin && text==="/ปิดโต๊ะ"){
-table.open=false;
-await table.save();
-return pushText("🚫 ปิดรับแทง");
-}
-
-
-// ================= BET =================
-const bet=text.match(/^(ด|ง)(\d+)$/);
-
-if(bet){
-
-if(!table.open)
-return reply(event,"โต๊ะปิด");
-
-const side=bet[1]=="ด"?"red":"blue";
-const amount=parseInt(bet[2]);
-
-if(user.credit<amount)
-return reply(event,"เงินไม่พอ");
-
-const total=
-table.bets
-.filter(b=>b.side===side)
-.reduce((s,b)=>s+b.amount,0);
-
-if(total+amount>table.limit)
-return reply(event,"เต็ม");
-
-user.credit-=amount;
-await user.save();
-
-const old=
-table.bets.find(
-b=>b.userId===user.userId &&
-b.side===side
-);
-
-if(old) old.amount+=amount;
-else table.bets.push({
-userId:user.userId,
-name:user.name,
-side,
-amount
-});
-
-await table.save();
-
-return pushFlex();
-}
-
-
-// ================= BILL =================
-if(text==="บิล"){
-
-const my=
-table.bets.filter(
-b=>b.userId===user.userId
-);
-
-if(!my.length)
-return reply(event,"ไม่มีบิล");
-
-let msg="🎫 บิล\n";
-
-my.forEach(b=>{
-msg+=`${b.side==="red"?"🔴":"🔵"} ${b.amount}\n`;
-});
-
-return reply(event,msg);
-}
-
-
-// ================= CANCEL =================
-if(text==="ยกเลิก"){
-
-if(!table.open)
-return reply(event,"โต๊ะปิด");
-
-let refund=0;
-
-table.bets=
-table.bets.filter(b=>{
-if(b.userId===user.userId){
-refund+=b.amount;
-return false;
-}
-return true;
-});
-
-user.credit+=refund;
-
-await user.save();
-await table.save();
-
-pushFlex();
-
-return reply(event,
-`คืน ${refund}`);
-}
-
-
-// ================= RESULT =================
-if(isAdmin && text==="/แดงชนะ"){
-await payWinner("red");
-return pushText("🏆 แดงชนะ");
-}
-
-if(isAdmin && text==="/น้ำเงินชนะ"){
-await payWinner("blue");
-return pushText("🏆 น้ำเงินชนะ");
-}
-
-
-// ================= SUMMARY =================
-if(isAdmin && text==="/สรุป"){
-
-let msg="📊 สรุป\n";
-
-table.bets.forEach(b=>{
-msg+=`${b.name}
-${b.side==="red"?"🔴":"🔵"} ${b.amount}\n`;
-});
-
-return pushText(msg||"ไม่มี");
-}
-
-
-// ================= RESET =================
-if(isAdmin && text==="/reset"){
-
-table.open=false;
-table.bets=[];
-
-await table.save();
-
-return pushText("♻️ RESET");
-}
-
-}
-
-
-// ================= PAY =================
-async function payWinner(win){
-
-const table=await getTable();
-
-for(const b of table.bets){
-
-if(b.side===win){
-
-const u=
-await User.findOne({userId:b.userId});
-
-u.credit+=b.amount*2;
-await u.save();
-}
-}
-
-table.open=false;
-table.bets=[];
-await table.save();
-}
-
 
 // ================= FLEX =================
-async function pushFlex(){
+async function pushTable(fight){
 
-const t=await getTable();
+const bets=await Bet.find({
+fightId:fight.fightId
+});
 
-let red=0;
-let blue=0;
+let red=0,blue=0;
 
-t.bets.forEach(b=>{
-if(b.side==="red")red+=b.amount;
-if(b.side==="blue")blue+=b.amount;
+bets.forEach(b=>{
+if(b.side==="R")red+=b.amount;
+if(b.side==="B")blue+=b.amount;
 });
 
 return client.pushMessage(
-GROUP_ID,{
+GROUP_ID,
+{
 type:"flex",
 altText:"LIVE",
 contents:{
@@ -311,23 +65,28 @@ layout:"vertical",
 contents:[
 {
 type:"text",
-text:"🔥 LIVE TABLE",
+text:`🔥 คู่ ${fight.fightId}`,
 weight:"bold",
-size:"xl",
-align:"center"
+size:"xl"
 },
 {
 type:"text",
-text:`🔴 ${red}/${t.limit}`
+text:`🔴 ${fight.red} (${fight.rateRed})`
 },
 {
 type:"text",
-text:`🔵 ${blue}/${t.limit}`
+text:`ยอด ${red}`
+},
+{
+type:"separator"
 },
 {
 type:"text",
-text:`รวม ${red+blue}`,
-weight:"bold"
+text:`🔵 ${fight.blue} (${fight.rateBlue})`
+},
+{
+type:"text",
+text:`ยอด ${blue}`
 }
 ]
 }
@@ -335,18 +94,168 @@ weight:"bold"
 });
 }
 
+// ================= EVENT =================
+async function handleEvent(event){
 
-// ================= PUSH =================
-function pushText(msg){
-return client.pushMessage(
-GROUP_ID,{type:"text",text:msg});
+if(event.type!=="message")return;
+if(event.message.type!=="text")return;
+
+const msg=event.message.text.trim();
+const userId=event.source.userId;
+
+let user=await User.findOne({userId});
+if(!user) user=await User.create({userId});
+
+// ===== เครดิต =====
+if(msg==="เครดิต"){
+return reply(event,
+`💰 เครดิต ${user.credit}`);
 }
 
+// ===== เติม =====
+if(msg.startsWith("เติม")){
+
+if(userId!==ADMIN)return;
+
+const d=msg.split(" ");
+let u=await User.findOne({userId:d[1]});
+if(!u)u=await User.create({userId:d[1]});
+
+u.credit+=parseInt(d[2]);
+await u.save();
+
+return reply(event,"✅ เติมแล้ว");
+}
+
+// ===== เปิดคู่ =====
+// เปิดคู่ 101 แดง น้ำเงิน 10/9 10/9
+if(msg.startsWith("เปิดคู่")){
+
+if(userId!==ADMIN)return;
+
+const d=msg.split(" ");
+
+const fight=await Fight.create({
+fightId:d[1],
+red:d[2],
+blue:d[3],
+rateRed:d[4],
+rateBlue:d[5],
+status:"open"
+});
+
+return pushTable(fight);
+}
+
+// ===== แทง =====
+// 101 R 500
+if(/^\d+/.test(msg)){
+
+const d=msg.split(" ");
+
+const fight=await Fight.findOne({
+fightId:d[0],
+status:"open"
+});
+
+if(!fight)
+return reply(event,"❌ ปิดรับ");
+
+const side=d[1];
+const money=parseInt(d[2]);
+
+if(user.credit<money)
+return reply(event,"เงินไม่พอ");
+
+user.credit-=money;
+await user.save();
+
+await Bet.create({
+userId,
+fightId:fight.fightId,
+side,
+amount:money
+});
+
+await pushTable(fight);
+
+return reply(event,
+`✅ แทงสำเร็จ
+คู่ ${fight.fightId}
+${side}
+${money}`);
+}
+
+// ===== ปิด =====
+if(msg.startsWith("ปิดคู่")){
+
+if(userId!==ADMIN)return;
+
+await Fight.updateOne(
+{fightId:msg.split(" ")[1]},
+{status:"close"}
+);
+
+return client.pushMessage(
+GROUP_ID,
+{type:"text",text:"⛔ ปิดรับแทง"}
+);
+}
+
+// ===== ตัดสิน =====
+// ชนะ 101 R
+if(msg.startsWith("ชนะ")){
+
+if(userId!==ADMIN)return;
+
+const d=msg.split(" ");
+const id=d[1];
+const win=d[2];
+
+const fight=await Fight.findOne({fightId:id});
+
+const bets=await Bet.find({
+fightId:id,
+side:win
+});
+
+for(const b of bets){
+
+const u=await User.findOne({
+userId:b.userId
+});
+
+const rate=
+win==="R"
+?fight.rateRed
+:fight.rateBlue;
+
+u.credit+=b.amount+
+calcPay(rate,b.amount);
+
+await u.save();
+}
+
+await Fight.updateOne(
+{fightId:id},
+{status:"finish"}
+);
+
+return client.pushMessage(
+GROUP_ID,
+{type:"text",text:`🏆 คู่ ${id} ตัดสินแล้ว`}
+);
+}
+
+}
+
+// ================= REPLY =================
 function reply(event,text){
 return client.replyMessage(
 event.replyToken,
-{type:"text",text});
+{type:"text",text}
+);
 }
 
 app.listen(3000,
-()=>console.log("🚀 V9 RUNNING"));
+()=>console.log("🚀 BOT V12 RUNNING"));

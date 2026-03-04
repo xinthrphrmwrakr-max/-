@@ -6,6 +6,8 @@ const mongoose=require("mongoose");
 
 const User=require("./models/User");
 const Table=require("./models/Table");
+const Fight=require("./models/Fight");
+const Bet=require("./models/Bet");
 
 const app=express();
 

@@ -1,13 +1,8 @@
-const mongoose = require("mongoose");
+const mongoose=require("mongoose");
 
-const BetSchema = new mongoose.Schema({
-  userId: String,
-  name: String,
-  team: String,
-  amount: Number,
-  rate: Number,
-  round: Number
+module.exports=mongoose.model("Bet",{
+userId:String,
+fightId:Number,
+side:String,
+amount:Number
 });
-
-module.exports =
-mongoose.model("Bet", BetSchema);

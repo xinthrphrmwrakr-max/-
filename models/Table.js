@@ -1,17 +1,23 @@
 const mongoose = require("mongoose");
 
 const tableSchema = new mongoose.Schema({
-  tableId: String,
-  rateRed: Number,
-  rateBlue: Number,
-  totalRed: { type: Number, default: 0 },
-  totalBlue: { type: Number, default: 0 },
-  status: { type: String, default: "open" },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  open: { type:Boolean, default:false },
+
+  rateRed:Number,
+  rateBlue:Number,
+
+  poolRed:{ type:Object, default:{} },
+  poolBlue:{ type:Object, default:{} },
+
+  bets:[
+    {
+      userId:String,
+      name:String,
+      side:String,
+      amount:Number
+    }
+  ]
 });
 
 module.exports =
-mongoose.model("Table", tableSchema);
+mongoose.model("Table",tableSchema);

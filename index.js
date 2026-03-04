@@ -77,17 +77,21 @@ async function handleEvent(event){
 if(event.type!=="message") return;
 if(event.message.type!=="text") return;
 
-const text = event.message.text.trim();
+const text = event.message.text.trim().toLowerCase();
 
+
+// ===== GET GROUP ID =====
 if(event.source.type==="group" && text==="gid"){
-   const groupId = event.source.groupId;
 
-   return client.replyMessage(event.replyToken,{
-      type:"text",
-      text:`GROUP ID : ${groupId}`
-   });
+  const groupId = event.source.groupId;
+
+  console.log("GROUP ID =", groupId);
+
+  return client.replyMessage(event.replyToken,{
+    type:"text",
+    text:`GROUP ID : ${groupId}`
+  });
 }
-
 const profile=
 await client.getProfile(
 event.source.userId

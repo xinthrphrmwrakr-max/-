@@ -1,4 +1,4 @@
-require('dotenv').config();
+require("dotenv").config();
 
 const express=require("express");
 const line=require("@line/bot-sdk");
@@ -6,14 +6,12 @@ const mongoose=require("mongoose");
 
 const User=require("./models/User");
 const Table=require("./models/Table");
-const Fight=require("./models/Fight");
-const Bet=require("./models/Bet");
 
 const app=express();
 
 const config={
-channelAccessToken:process.env.CHANNEL_ACCESS_TOKEN,
-channelSecret:process.env.CHANNEL_SECRET
+ channelAccessToken:process.env.CHANNEL_ACCESS_TOKEN,
+ channelSecret:process.env.CHANNEL_SECRET
 };
 
 const client=new line.Client(config);
@@ -27,16 +25,19 @@ const GROUP_ID="GROUP_ID";
 
 // ================= TABLE =================
 async function getTable(){
+
 let t=await Table.findOne();
 
 if(!t){
 t=await Table.create({
 open:false,
-poolRed:{},
-poolBlue:{},
+rateRed:0,
+rateBlue:0,
+limit:0,
 bets:[]
 });
 }
+
 return t;
 }
 
@@ -90,56 +91,42 @@ const isAdmin=
 event.source.userId===ADMIN;
 
 
-// ========= CREDIT =========
+// ===== CREDIT =====
 if(text.toLowerCase()==="c"){
 return reply(event,
 `${user.name}
-💰 เครดิต ${user.credit}`
-);
+💰 เครดิต ${user.credit}`);
 }
 
 
-// ========= ADMIN เติม =========
+// ===== เติม =====
 if(isAdmin && text.startsWith("/เติม")){
-
-const amount=parseInt(text.split(" ")[1]);
-
-user.credit+=amount;
+const a=parseInt(text.split(" ")[1]);
+user.credit+=a;
 await user.save();
-
-return reply(event,
-`✅ เติม ${amount}
-💰 ${user.credit}`
-);
+return reply(event,`✅ เติม ${a}`);
 }
 
 
-// ========= ADMIN หัก =========
+// ===== หัก =====
 if(isAdmin && text.startsWith("/หัก")){
-
-const amount=parseInt(text.split(" ")[1]);
-
-user.credit-=amount;
+const a=parseInt(text.split(" ")[1]);
+user.credit-=a;
 await user.save();
-
-return reply(event,
-`❌ หัก ${amount}
-💰 ${user.credit}`
-);
+return reply(event,`❌ หัก ${a}`);
 }
 
 
-// ========= OPEN =========
+// ===== OPEN =====
 if(isAdmin && text.startsWith("/เปิดโต๊ะ")){
 
 const sp=text.split(" ");
 
 table.open=true;
-table.rateRed=parseInt(sp[1]);
-table.rateBlue=parseInt(sp[2]);
+table.rateRed=sp[1];
+table.rateBlue=sp[2];
+table.limit=parseInt(sp[3]);
 
-table.poolRed={};
-table.poolBlue={};
 table.bets=[];
 
 await table.save();
@@ -148,7 +135,7 @@ return pushFlex();
 }
 
 
-// ========= CLOSE =========
+// ===== CLOSE =====
 if(isAdmin && text==="/ปิดโต๊ะ"){
 table.open=false;
 await table.save();
@@ -156,7 +143,7 @@ return pushText("🚫 ปิดรับแทง");
 }
 
 
-// ========= BET =========
+// ===== BET =====
 const bet=text.match(/^(ด|ง)(\d+)/);
 
 if(bet){
@@ -171,6 +158,17 @@ const amount=parseInt(bet[2]);
 
 if(user.credit<amount)
 return reply(event,"เงินไม่พอ");
+
+
+// ✅ รวมยอดฝั่ง
+const totalSide=
+table.bets
+.filter(b=>b.side===side)
+.reduce((s,b)=>s+b.amount,0);
+
+if(totalSide+amount>table.limit)
+return reply(event,"❌ ราคานี้เต็มแล้ว");
+
 
 user.credit-=amount;
 await user.save();
@@ -188,7 +186,7 @@ return pushFlex();
 }
 
 
-// ========= RESULT =========
+// ===== RESULT =====
 if(isAdmin && text==="/แดงชนะ"){
 await payWinner("red");
 return pushText("🏆 แดงชนะ");
@@ -212,9 +210,7 @@ for(const b of table.bets){
 if(b.side===win){
 
 const u=
-await User.findOne({
-userId:b.userId
-});
+await User.findOne({userId:b.userId});
 
 u.credit+=b.amount*2;
 await u.save();
@@ -232,22 +228,16 @@ async function pushFlex(){
 
 const t=await getTable();
 
-let rank={};
+let red=0;
+let blue=0;
 
 t.bets.forEach(b=>{
-rank[b.name]=(rank[b.name]||0)+b.amount;
+if(b.side==="red")red+=b.amount;
+if(b.side==="blue")blue+=b.amount;
 });
 
-const top=
-Object.entries(rank)
-.sort((a,b)=>b[1]-a[1])
-.slice(0,3)
-.map((r,i)=>`${i+1}. ${r[0]} ${r[1]}`)
-.join("\n")||"-";
-
 return client.pushMessage(
-GROUP_ID,
-{
+GROUP_ID,{
 type:"flex",
 altText:"LIVE",
 contents:{
@@ -261,19 +251,22 @@ type:"text",
 text:"🔥 สายใต้ไก่เดือย",
 weight:"bold",
 size:"xl",
-align:"center",
-color:"#ff3b3b"
+align:"center"
 },
 {
-type:"separator",
+type:"text",
+text:`🔴 ${red}/${t.limit}`,
 margin:"md"
 },
 {
 type:"text",
-text:`🏆 อันดับคนแทง\n${top}`,
-margin:"md"
+text:`🔵 ${blue}/${t.limit}`
 }
 ]
+}
+}
+});
+}
 
 
 // ================= PUSH =================
@@ -292,4 +285,4 @@ event.replyToken,
 }
 
 app.listen(3000,
-()=>console.log("🚀 BOT V6 RUNNING"));
+()=>console.log("🚀 BOT V7 RUNNING"));

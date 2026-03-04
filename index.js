@@ -1,59 +1,56 @@
-require('dotenv').config();
+require("dotenv").config();
 
 const express = require("express");
 const line = require("@line/bot-sdk");
 const mongoose = require("mongoose");
 
-const User=require("./models/User");
-const Table=require("./models/Table");
+const User = require("./models/User");
+const Table = require("./models/Table");
 
-const app=express();
+const app = express();
 
 const config = {
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
   channelSecret: process.env.CHANNEL_SECRET
 };
 
-const client=new line.Client(config);
+const client = new line.Client(config);
 
+// ================= DB =================
 mongoose.connect(process.env.MONGO_URI)
-.then(() => console.log("Mongo Connected"))
-.catch(err => console.log(err));
+.then(()=>console.log("✅ Mongo Connected"))
+.catch(err=>console.log(err));
 
 const ADMIN="U3bb879084521bbe454c63a2fb7d56c64";
-const GROUP_ID="GROUP_ID";
 
 
 // ================= TABLE =================
 async function getTable(){
-
-let t=await Table.findOne();
+let t = await Table.findOne();
 
 if(!t){
-t=await Table.create({
+t = await Table.create({
 open:false,
 poolRed:{},
 poolBlue:{},
 bets:[]
 });
 }
-
 return t;
 }
 
 
 // ================= USER =================
 async function getUser(id,name){
-
-let u=await User.findOne({userId:id});
+let u = await User.findOne({userId:id});
 
 if(!u){
-u=await User.create({
+u = await User.create({
 userId:id,
-name
+name,
+credit:20000
 });
 }
-
 return u;
 }
 
@@ -63,69 +60,65 @@ app.post(
 "/webhook",
 line.middleware(config),
 (req,res)=>{
-Promise.all(
-req.body.events.map(handleEvent)
-);
+Promise.all(req.body.events.map(handleEvent));
 res.sendStatus(200);
 }
 );
 
 
 // ================= MAIN =================
+async function handleEvent(event){
+
+if(event.type!=="message") return;
+if(event.message.type!=="text") return;
+
+const text = event.message.text.trim().toLowerCase();
+
+
+// ===== GET GROUP ID =====
 if(event.source.type==="group" && text==="gid"){
+const gid = event.source.groupId;
 
-  const groupId = event.source.groupId;
+console.log("GROUP ID =",gid);
 
-  console.log("GROUP ID =", groupId);
-
-  return client.replyMessage(event.replyToken,{
-    type:"text",
-    text:`GROUP ID : ${groupId}`
-  });
-
+return client.replyMessage(event.replyToken,{
+type:"text",
+text:`GROUP ID : ${gid}`
+});
 }
-  
-const profile=
-await client.getProfile(
-event.source.userId
-);
 
-const user=
+
+const profile =
+await client.getProfile(event.source.userId);
+
+const user =
 await getUser(
 event.source.userId,
 profile.displayName
 );
 
-const table=
-await getTable();
+const table = await getTable();
 
-const isAdmin=
+const isAdmin =
 event.source.userId===ADMIN;
 
 
 // ========= CREDIT =========
-// ========= CREDIT + SUMMARY =========
-if(text.toLowerCase()==="c"){
+if(text==="c"){
 
-let totalBet=0;
+let total=0;
 
 for(const b of table.bets){
-
 if(b.userId===user.userId){
-totalBet+=b.amount;
+total+=b.amount;
 }
-
 }
 
 return reply(
 event,
 `👤 ${user.name}
 💰 เครดิต ${user.credit.toLocaleString()}
-🎯 แทงรวม ${totalBet.toLocaleString()}`
-);
-}return reply(event,
-`${user.name}
-💰 ${user.credit.toLocaleString()}`
+🎯 แทงรวม ${total.toLocaleString()}`
 );
 }
 
@@ -145,7 +138,7 @@ table.bets=[];
 
 await table.save();
 
-return pushFlex();
+return pushFlex(event.source.groupId);
 }
 
 
@@ -153,7 +146,7 @@ return pushFlex();
 if(isAdmin && text==="/ปิดโต๊ะ"){
 table.open=false;
 await table.save();
-return pushText("🚫 ปิดรับแทง");
+return pushText(event.source.groupId,"🚫 ปิดรับแทง");
 }
 
 
@@ -165,7 +158,7 @@ if(bet){
 if(!table.open)
 return reply(event,"❌ โต๊ะปิด");
 
-const side=
+const side =
 bet[1]=="ด"?"red":"blue";
 
 const amount=parseInt(bet[2]);
@@ -176,18 +169,17 @@ return reply(event,"เงินไม่พอ");
 user.credit-=amount;
 await user.save();
 
-const pool=
+const pool =
 side=="red"
 ?table.poolRed
 :table.poolBlue;
 
-const rate=
+const rate =
 side=="red"
 ?table.rateRed
 :table.rateBlue;
 
-if(!pool[rate])
-pool[rate]=0;
+if(!pool[rate]) pool[rate]=0;
 
 pool[rate]+=amount;
 
@@ -200,19 +192,19 @@ amount
 
 await table.save();
 
-return pushFlex();
+return pushFlex(event.source.groupId);
 }
 
 
 // ========= RESULT =========
 if(isAdmin && text==="/แดงชนะ"){
 await payWinner("red");
-return pushText("🏆 แดงชนะ");
+return pushText(event.source.groupId,"🏆 แดงชนะ");
 }
 
 if(isAdmin && text==="/น้ำเงินชนะ"){
 await payWinner("blue");
-return pushText("🏆 น้ำเงินชนะ");
+return pushText(event.source.groupId,"🏆 น้ำเงินชนะ");
 }
 
 }
@@ -228,9 +220,7 @@ for(const b of table.bets){
 if(b.side===win){
 
 const u=
-await User.findOne({
-userId:b.userId
-});
+await User.findOne({userId:b.userId});
 
 u.credit+=b.amount*2;
 await u.save();
@@ -243,23 +233,21 @@ await table.save();
 
 
 // ================= FLEX =================
-async function pushFlex(){
+async function pushFlex(groupId){
 
 const t=await getTable();
 
-const red=
+const red =
 Object.entries(t.poolRed)
 .map(([r,v])=>`${r} = ${v}`)
-.join("\n")||"-";
+.join("\n") || "-";
 
-const blue=
+const blue =
 Object.entries(t.poolBlue)
 .map(([r,v])=>`${r} = ${v}`)
-.join("\n")||"-";
+.join("\n") || "-";
 
-return client.pushMessage(
-GROUP_ID,
-{
+return client.pushMessage(groupId,{
 type:"flex",
 altText:"LIVE",
 contents:{
@@ -268,22 +256,10 @@ body:{
 type:"box",
 layout:"vertical",
 contents:[
-{
-type:"text",
-text:"🔥 บุญเท่ง ไก่ใต้",
-weight:"bold"
-},
-{
-type:"text",
-text:`🔴\n${red}`
-},
-{
-type:"separator"
-},
-{
-type:"text",
-text:`🔵\n${blue}`
-}
+{type:"text",text:"🔥 โต๊ะไก่ชน",weight:"bold"},
+{type:"text",text:`🔴\n${red}`},
+{type:"separator"},
+{type:"text",text:`🔵\n${blue}`}
 ]
 }
 }
@@ -291,12 +267,12 @@ text:`🔵\n${blue}`
 }
 
 
-// ================= PUSH TEXT =================
-function pushText(msg){
-return client.pushMessage(
-GROUP_ID,
-{type:"text",text:msg}
-);
+// ================= PUSH =================
+function pushText(groupId,msg){
+return client.pushMessage(groupId,{
+type:"text",
+text:msg
+});
 }
 
 
@@ -310,5 +286,4 @@ event.replyToken,
 
 
 app.listen(3000,
-()=>console.log("✅ V4 REAL TABLE RUNNING")
-);
+()=>console.log("✅ BOT PRO MAX RUNNING"));

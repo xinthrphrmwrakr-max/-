@@ -72,16 +72,7 @@ res.sendStatus(200);
 
 
 // ================= MAIN =================
-async function handleEvent(event){
-
-  if(event.type !== "message") return;
-  if(event.message.type !== "text") return;
-
-  const text = event.message.text.trim().toLowerCase();
-
-
-  // ===== SHOW GROUP ID =====
- if(event.source.type==="group" && text==="gid"){
+if(event.source.type==="group" && text==="gid"){
 
   const groupId = event.source.groupId;
 
@@ -92,7 +83,7 @@ async function handleEvent(event){
     text:`GROUP ID : ${groupId}`
   });
 
-} // 
+}
   
 const profile=
 await client.getProfile(

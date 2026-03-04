@@ -79,6 +79,19 @@ if(event.message.type!=="text")return;
 
 const text=event.message.text.trim();
 
+
+// ===== SHOW GROUP ID =====
+if(event.source.type === "group"){
+  const groupId = event.source.groupId;
+
+  console.log("GROUP ID =", groupId);
+
+  return client.replyMessage(event.replyToken,{
+    type:"text",
+    text:"GROUP ID : " + groupId
+  });
+}
+
 const profile=
 await client.getProfile(
 event.source.userId
@@ -98,8 +111,26 @@ event.source.userId===ADMIN;
 
 
 // ========= CREDIT =========
+// ========= CREDIT + SUMMARY =========
 if(text.toLowerCase()==="c"){
-return reply(event,
+
+let totalBet=0;
+
+for(const b of table.bets){
+
+if(b.userId===user.userId){
+totalBet+=b.amount;
+}
+
+}
+
+return reply(
+event,
+`👤 ${user.name}
+💰 เครดิต ${user.credit.toLocaleString()}
+🎯 แทงรวม ${totalBet.toLocaleString()}`
+);
+}return reply(event,
 `${user.name}
 💰 ${user.credit.toLocaleString()}`
 );

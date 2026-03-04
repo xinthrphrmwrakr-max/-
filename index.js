@@ -60,11 +60,13 @@ return u;
 
 
 // ================= WEBHOOK =================
-app.post("/webhook",
-line.middleware(config),
-(req,res)=>{
-Promise.all(req.body.events.map(handleEvent));
-res.sendStatus(200);
+app.post("/webhook", line.middleware(config), (req, res) => {
+
+  req.body.events.forEach(event => {
+    console.log("EVENT =", event.source);
+  });
+
+  res.sendStatus(200);
 });
 
 

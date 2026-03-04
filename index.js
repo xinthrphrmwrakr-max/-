@@ -1,26 +1,30 @@
 require("dotenv").config();
 
-const express=require("express");
-const line=require("@line/bot-sdk");
-const mongoose=require("mongoose");
+const express = require("express");
+const line = require("@line/bot-sdk");
+const mongoose = require("mongoose");
 
-const User=require("./models/User");
-const Table=require("./models/Table");
+const User = require("./models/User");
+const Table = require("./models/Table");
 
-const app=express();
+const app = express();
 
-const config={
- channelAccessToken:process.env.CHANNEL_ACCESS_TOKEN,
- channelSecret:process.env.CHANNEL_SECRET
+const config = {
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.CHANNEL_SECRET
 };
 
-const client=new line.Client(config);
+const client = new line.Client(config);
 
+// ================= MONGO =================
 mongoose.connect(process.env.MONGO_URI)
-.then(()=>console.log("✅ Mongo Connected"));
+.then(()=>console.log("✅ Mongo Connected"))
+.catch(err=>console.log(err));
 
+
+// ================= CONFIG =================
 const ADMIN="U3bb879084521bbe454c63a2fb7d56c64";
-const GROUP_ID="GROUP_ID";
+const GROUP_ID="Cbe4b98d3adcc05e91341e544ef99ba5d";
 
 
 // ================= TABLE =================
@@ -60,31 +64,60 @@ return u;
 
 
 // ================= WEBHOOK =================
-app.post("/webhook", line.middleware(config), (req, res) => {
+app.post("/webhook",
+line.middleware(config),
+(req,res)=>{
 
-  req.body.events.forEach(event => {
-    console.log("EVENT =", event.source);
-  });
+Promise
+.all(req.body.events.map(handleEvent))
+.then(()=>res.sendStatus(200))
+.catch(err=>{
+console.error(err);
+res.sendStatus(500);
+});
 
-  res.sendStatus(200);
 });
 
 
 // ================= MAIN =================
 async function handleEvent(event){
 
-if(event.type!=="message")return;
-if(event.message.type!=="text")return;
+if(event.type!=="message") return;
+if(event.message.type!=="text") return;
+
+// ✅ ทำงานเฉพาะกลุ่มนี้
+if(
+event.source.type==="group" &&
+event.source.groupId!==GROUP_ID
+)return;
 
 const text=event.message.text.trim();
 
-const profile=
-await client.getProfile(event.source.userId);
 
+// ===== SAFE PROFILE =====
+let name="User";
+
+try{
+if(event.source.type==="group"){
+const p=await client.getGroupMemberProfile(
+event.source.groupId,
+event.source.userId
+);
+name=p.displayName;
+}else{
+const p=await client.getProfile(
+event.source.userId
+);
+name=p.displayName;
+}
+}catch{}
+
+
+// ===== USER =====
 const user=
 await getUser(
 event.source.userId,
-profile.displayName
+name
 );
 
 const table=await getTable();
@@ -93,7 +126,7 @@ const isAdmin=
 event.source.userId===ADMIN;
 
 
-// ===== CREDIT =====
+// ================= CREDIT =================
 if(text.toLowerCase()==="c"){
 return reply(event,
 `${user.name}
@@ -101,25 +134,32 @@ return reply(event,
 }
 
 
-// ===== เติม =====
+// ================= เติม =================
 if(isAdmin && text.startsWith("/เติม")){
-const a=parseInt(text.split(" ")[1]);
-user.credit+=a;
-await user.save();
-return reply(event,`✅ เติม ${a}`);
+
+const sp=text.split(" ");
+
+if(sp.length<3)
+return reply(event,"ใช้: /เติม USERID จำนวน");
+
+const target=
+await User.findOne({userId:sp[1]});
+
+if(!target)
+return reply(event,"ไม่พบ USER");
+
+const amount=parseInt(sp[2]);
+
+target.credit+=amount;
+await target.save();
+
+return pushText(
+`✅ เติม ${amount} ให้ ${target.name}`
+);
 }
 
 
-// ===== หัก =====
-if(isAdmin && text.startsWith("/หัก")){
-const a=parseInt(text.split(" ")[1]);
-user.credit-=a;
-await user.save();
-return reply(event,`❌ หัก ${a}`);
-}
-
-
-// ===== OPEN =====
+// ================= OPEN =================
 if(isAdmin && text.startsWith("/เปิดโต๊ะ")){
 
 const sp=text.split(" ");
@@ -137,7 +177,7 @@ return pushFlex();
 }
 
 
-// ===== CLOSE =====
+// ================= CLOSE =================
 if(isAdmin && text==="/ปิดโต๊ะ"){
 table.open=false;
 await table.save();
@@ -145,8 +185,8 @@ return pushText("🚫 ปิดรับแทง");
 }
 
 
-// ===== BET =====
-const bet=text.match(/^(ด|ง)(\d+)/);
+// ================= BET =================
+const bet=text.match(/^(ด|ง)\s*(\d+)$/);
 
 if(bet){
 
@@ -162,25 +202,38 @@ if(user.credit<amount)
 return reply(event,"เงินไม่พอ");
 
 
-// ✅ รวมยอดฝั่ง
+// ✅ ตรวจ limit
 const totalSide=
 table.bets
 .filter(b=>b.side===side)
 .reduce((s,b)=>s+b.amount,0);
 
 if(totalSide+amount>table.limit)
-return reply(event,"❌ ราคานี้เต็มแล้ว");
+return reply(event,"❌ ราคานี้เต็ม");
 
 
+// ✅ หักเงิน
 user.credit-=amount;
 await user.save();
 
+
+// ✅ รวมบิลเดิม
+const old=
+table.bets.find(
+b=>b.userId===user.userId &&
+b.side===side
+);
+
+if(old){
+old.amount+=amount;
+}else{
 table.bets.push({
 userId:user.userId,
 name:user.name,
 side,
 amount
 });
+}
 
 await table.save();
 
@@ -188,7 +241,7 @@ return pushFlex();
 }
 
 
-// ===== RESULT =====
+// ================= RESULT =================
 if(isAdmin && text==="/แดงชนะ"){
 await payWinner("red");
 return pushText("🏆 แดงชนะ");
@@ -234,8 +287,8 @@ let red=0;
 let blue=0;
 
 t.bets.forEach(b=>{
-if(b.side==="red")red+=b.amount;
-if(b.side==="blue")blue+=b.amount;
+if(b.side==="red") red+=b.amount;
+if(b.side==="blue") blue+=b.amount;
 });
 
 return client.pushMessage(
@@ -263,6 +316,12 @@ margin:"md"
 {
 type:"text",
 text:`🔵 ${blue}/${t.limit}`
+},
+{
+type:"text",
+text:`รวม ${red+blue}`,
+weight:"bold",
+margin:"md"
 }
 ]
 }
@@ -286,5 +345,7 @@ event.replyToken,
 );
 }
 
+
+// ================= SERVER =================
 app.listen(3000,
-()=>console.log("🚀 BOT V7 RUNNING"));
+()=>console.log("🚀 BOT FINAL RUNNING"));

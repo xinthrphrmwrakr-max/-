@@ -20,23 +20,71 @@ const client=new line.Client(config);
 mongoose.connect(process.env.MONGO_URI)
 .then(()=>console.log("✅ Mongo Connected"));
 
-const ADMIN="ใส่USER_ID";
-const GROUP_ID="ใส่GROUP_ID";
+const ADMIN="U3bb879084521bbe454c63a2fb7d56c64"; 
+const GROUP_ID="Cbe4b98d3adcc05e91341e544ef99ba5d";
 
 // ================= WEBHOOK =================
 app.post("/webhook",
 line.middleware(config),
-async(req,res)=>{
-await Promise.all(req.body.events.map(handleEvent));
-res.json({});
+(req,res)=>{
+
+Promise
+.all(req.body.events.map(handleEvent))
+.then(()=>res.sendStatus(200))
+.catch(err=>{
+console.log(err);
+res.sendStatus(500);
 });
+
+});
+
 
 // ================= RATE =================
 function calcPay(rate,amount){
 
 const r=rate.split("/");
-return amount*(parseFloat(r[0])/parseFloat(r[1]));
+return amount*(Number(r[0])/Number(r[1]));
+
 }
+
+
+// ================= USER =================
+async function getUser(event){
+
+const uid=event.source.userId;
+
+let profile;
+
+try{
+
+if(event.source.type==="group"){
+profile=
+await client.getGroupMemberProfile(
+event.source.groupId,
+uid
+);
+}else{
+profile=
+await client.getProfile(uid);
+}
+
+}catch{
+profile={displayName:"User"};
+}
+
+let user=await User.findOne({userId:uid});
+
+if(!user){
+user=await User.create({
+userId:uid,
+name:profile.displayName,
+credit:0
+});
+}
+
+return user;
+}
+
 
 // ================= FLEX =================
 async function pushTable(fight){
@@ -52,9 +100,7 @@ if(b.side==="R")red+=b.amount;
 if(b.side==="B")blue+=b.amount;
 });
 
-return client.pushMessage(
-GROUP_ID,
-{
+return client.pushMessage(GROUP_ID,{
 type:"flex",
 altText:"LIVE",
 contents:{
@@ -77,9 +123,7 @@ text:`🔴 ${fight.red} (${fight.rateRed})`
 type:"text",
 text:`ยอด ${red}`
 },
-{
-type:"separator"
-},
+{type:"separator"},
 {
 type:"text",
 text:`🔵 ${fight.blue} (${fight.rateBlue})`
@@ -92,7 +136,9 @@ text:`ยอด ${blue}`
 }
 }
 });
+
 }
+
 
 // ================= EVENT =================
 async function handleEvent(event){
@@ -101,34 +147,41 @@ if(event.type!=="message")return;
 if(event.message.type!=="text")return;
 
 const msg=event.message.text.trim();
-const userId=event.source.userId;
+const user=await getUser(event);
+const userId=user.userId;
 
-let user=await User.findOne({userId});
-if(!user) user=await User.create({userId});
 
 // ===== เครดิต =====
-if(msg==="เครดิต"){
+if(msg==="C" || msg==="เครดิต"){
 return reply(event,
-`💰 เครดิต ${user.credit}`);
+`${user.name}
+💰 เครดิต ${user.credit}`);
 }
 
+
 // ===== เติม =====
+// เติม USERID 1000
 if(msg.startsWith("เติม")){
 
 if(userId!==ADMIN)return;
 
 const d=msg.split(" ");
-let u=await User.findOne({userId:d[1]});
-if(!u)u=await User.create({userId:d[1]});
 
-u.credit+=parseInt(d[2]);
+let u=await User.findOne({userId:d[1]});
+if(!u)
+u=await User.create({
+userId:d[1],
+credit:0
+});
+
+u.credit+=Number(d[2]);
 await u.save();
 
-return reply(event,"✅ เติมแล้ว");
+return reply(event,"✅ เติมเครดิตแล้ว");
 }
 
+
 // ===== เปิดคู่ =====
-// เปิดคู่ 101 แดง น้ำเงิน 10/9 10/9
 if(msg.startsWith("เปิดคู่")){
 
 if(userId!==ADMIN)return;
@@ -147,9 +200,10 @@ status:"open"
 return pushTable(fight);
 }
 
+
 // ===== แทง =====
 // 101 R 500
-if(/^\d+/.test(msg)){
+if(/^\d+\s[RB]\s\d+$/i.test(msg)){
 
 const d=msg.split(" ");
 
@@ -161,8 +215,8 @@ status:"open"
 if(!fight)
 return reply(event,"❌ ปิดรับ");
 
-const side=d[1];
-const money=parseInt(d[2]);
+const side=d[1].toUpperCase();
+const money=Number(d[2]);
 
 if(user.credit<money)
 return reply(event,"เงินไม่พอ");
@@ -172,6 +226,7 @@ await user.save();
 
 await Bet.create({
 userId,
+name:user.name,
 fightId:fight.fightId,
 side,
 amount:money
@@ -186,7 +241,8 @@ ${side}
 ${money}`);
 }
 
-// ===== ปิด =====
+
+// ===== ปิดคู่ =====
 if(msg.startsWith("ปิดคู่")){
 
 if(userId!==ADMIN)return;
@@ -202,6 +258,7 @@ GROUP_ID,
 );
 }
 
+
 // ===== ตัดสิน =====
 // ชนะ 101 R
 if(msg.startsWith("ชนะ")){
@@ -210,7 +267,7 @@ if(userId!==ADMIN)return;
 
 const d=msg.split(" ");
 const id=d[1];
-const win=d[2];
+const win=d[2].toUpperCase();
 
 const fight=await Fight.findOne({fightId:id});
 
@@ -230,7 +287,8 @@ win==="R"
 ?fight.rateRed
 :fight.rateBlue;
 
-u.credit+=b.amount+
+u.credit+=
+b.amount+
 calcPay(rate,b.amount);
 
 await u.save();
@@ -243,11 +301,13 @@ await Fight.updateOne(
 
 return client.pushMessage(
 GROUP_ID,
-{type:"text",text:`🏆 คู่ ${id} ตัดสินแล้ว`}
+{type:"text",
+text:`🏆 คู่ ${id} ตัดสินแล้ว`}
 );
 }
 
 }
+
 
 // ================= REPLY =================
 function reply(event,text){
@@ -258,4 +318,4 @@ event.replyToken,
 }
 
 app.listen(3000,
-()=>console.log("🚀 BOT V12 RUNNING"));
+()=>console.log("🚀 BOT V13 RUNNING"));

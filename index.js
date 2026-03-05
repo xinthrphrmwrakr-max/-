@@ -149,7 +149,24 @@ if(event.message.type!=="text")return;
 const msg=event.message.text.trim();
 const user=await getUser(event);
 const userId=user.userId;
+  
+// ===== สมัครสมาชิก =====
+if(msg==="สมัคร"){
 
+let user=await User.findOne({userId});
+
+if(!user){
+user=await User.create({
+userId,
+credit:0
+});
+}
+
+return reply(event,
+`✅ สมัครแล้ว
+ID:
+${userId}`);
+}
 
 // ===== เครดิต =====
 if(msg==="C" || msg==="เครดิต"){

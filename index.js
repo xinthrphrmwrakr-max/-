@@ -143,51 +143,71 @@ text:`ยอด ${blue}`
 // ================= EVENT =================
 async function handleEvent(event){
 
-if(event.type!=="message")return;
-if(event.message.type!=="text")return;
+try{
 
-const msg=event.message.text.trim();
-const user=await getUser(event);
-const userId=user.userId;
-  
-// ===== สมัครสมาชิก =====
+if(event.type!=="message") return;
+if(event.message.type!=="text") return;
+
+const msg = event.message.text.trim();
+
+// ================= สมัคร =================
 if(msg==="สมัคร"){
+
+const userId = event.source.userId;
 
 let profile;
 
-// ✅ ถ้าอยู่ในกลุ่ม
+// ✅ ดึงชื่อจาก LINE
+try{
+
 if(event.source.type==="group"){
 profile = await client.getGroupMemberProfile(
 event.source.groupId,
-event.source.userId
+userId
 );
+}else{
+profile = await client.getProfile(userId);
 }
 
-// ✅ ถ้าแชทส่วนตัว
-else{
-profile = await client.getProfile(
-event.source.userId
-);
+}catch(err){
+console.log("ดึงชื่อไม่ได้");
+profile = {displayName:"สมาชิก"};
 }
 
 const displayName = profile.displayName;
 
+// ✅ เช็คสมาชิก
 let user = await User.findOne({userId});
 
 if(!user){
+
 user = await User.create({
 userId,
 name: displayName,
 credit:0
 });
-}
 
 return reply(event,
 `✅ สมัครสมาชิกสำเร็จ
-👤 ชื่อ: ${displayName}
-🆔 ID: ${userId}`);
+👤 ${displayName}
+💰 เครดิต 0`);
 }
 
+// ✅ สมัครซ้ำ
+return reply(event,
+`✅ คุณสมัครแล้ว
+👤 ${user.name}
+💰 เครดิต ${user.credit}`);
+}
+
+}catch(err){
+
+console.log("HANDLE ERROR:",err);
+
+return reply(event,"⚠️ ระบบกำลังโหลด");
+
+}
+}
 // ===== เติม =====
 // เติม USERID 1000
 if(msg.startsWith("เติม")){

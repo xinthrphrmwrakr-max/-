@@ -1,6 +1,12 @@
-const mongoose=require("mongoose");
+const mongoose = require("mongoose");
 
-module.exports=mongoose.model("User",{
+const UserSchema = new mongoose.Schema({
 userId:String,
-credit:{type:Number,default:0}
+name:String,
+credit:{
+type:Number,
+default:0
+}
 });
+
+module.exports = mongoose.model("User", UserSchema);

@@ -153,28 +153,40 @@ const userId=user.userId;
 // ===== สมัครสมาชิก =====
 if(msg==="สมัคร"){
 
-let user=await User.findOne({userId});
+let profile;
+
+// ✅ ถ้าอยู่ในกลุ่ม
+if(event.source.type==="group"){
+profile = await client.getGroupMemberProfile(
+event.source.groupId,
+event.source.userId
+);
+}
+
+// ✅ ถ้าแชทส่วนตัว
+else{
+profile = await client.getProfile(
+event.source.userId
+);
+}
+
+const displayName = profile.displayName;
+
+let user = await User.findOne({userId});
 
 if(!user){
-user=await User.create({
+user = await User.create({
 userId,
+name: displayName,
 credit:0
 });
 }
 
 return reply(event,
-`✅ สมัครแล้ว
-ID:
-${userId}`);
+`✅ สมัครสมาชิกสำเร็จ
+👤 ชื่อ: ${displayName}
+🆔 ID: ${userId}`);
 }
-
-// ===== เครดิต =====
-if(msg==="C" || msg==="เครดิต"){
-return reply(event,
-`${user.name}
-💰 เครดิต ${user.credit}`);
-}
-
 
 // ===== เติม =====
 // เติม USERID 1000

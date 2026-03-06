@@ -1,28 +1,38 @@
 require("dotenv").config();
 const express = require("express");
 const line = require("@line/bot-sdk");
+const mongoose = require("mongoose");
 
 const app = express();
 
 /* LINE CONFIG */
 const config = {
- channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
- channelSecret: process.env.CHANNEL_SECRET
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.CHANNEL_SECRET
 };
 
 const client = new line.Client(config);
 
-/* MEMORY DATABASE */
+/* CONNECT MONGO */
+mongoose.connect(process.env.MONGO_URI)
+.then(()=>console.log("MongoDB Connected"))
+.catch(err=>console.log(err));
+
+/* -----------------------------
+   MEMORY DATABASE
+------------------------------*/
 
 let users = {};
-let bets = {};
+let bets = [];
 
 let fightOpen = false;
-let price = null;
+let priceOpen = false;
+
+let price = {};
 let maxBet = 0;
 let totalBet = 0;
 
-/* ADMIN */
+/* ADMIN ID */
 const ADMIN_ID = "U3bb879084521bbe454c63a2fb7d56c64";
 
 /* WEBHOOK */
@@ -40,20 +50,68 @@ if(event.message.type !== "text") continue;
 const msg = event.message.text.trim();
 const uid = event.source.userId;
 
-/* โหลดชื่อ */
+console.log("USER:",uid,msg);
 
-if(!users[uid]){
+/* โหลดชื่อผู้ใช้ */
 
 const profile = await client.getProfile(uid);
 
+if(!users[uid]){
 users[uid] = {
 name: profile.displayName,
 credit: 1000
 };
-
 }
 
-/* เปิดราคา */
+/* =========================
+เปิดโต๊ะ
+========================= */
+
+if(msg === "เปิดโต๊ะ"){
+
+if(uid !== ADMIN_ID) continue;
+
+fightOpen = true;
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:"🐔 เปิดโต๊ะแล้ว"
+});
+
+continue;
+}
+
+/* =========================
+ปิดโต๊ะ + สรุป
+========================= */
+
+if(msg === "ปิดโต๊ะ"){
+
+if(uid !== ADMIN_ID) continue;
+
+fightOpen = false;
+priceOpen = false;
+
+let text = "📊 สรุปโต๊ะ\n\n";
+
+bets.forEach(b=>{
+text += `${b.name} ${b.side}${b.amount} @${b.price}\n`;
+});
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:text
+});
+
+bets = [];
+totalBet = 0;
+
+continue;
+}
+
+/* =========================
+เปิดราคา ด/7.5/6/5000
+========================= */
 
 if(msg.startsWith("ด/")){
 
@@ -68,24 +126,57 @@ r2: sp[2]
 
 maxBet = parseInt(sp[3]);
 totalBet = 0;
-fightOpen = true;
 
-await client.replyMessage(event.replyToken,{
+priceOpen = true;
+
+/* FLEX */
+
+const flex = {
+type:"flex",
+altText:"ราคาไก่",
+contents:{
+type:"bubble",
+body:{
+type:"box",
+layout:"vertical",
+contents:[
+{
 type:"text",
-text:`🐔 เปิดราคา ${msg}\nรับสูงสุด ${maxBet}`
-});
+text:"🐔 เปิดราคาใหม่",
+weight:"bold",
+size:"xl"
+},
+{
+type:"text",
+text:`ต่อ ${price.r2}`
+},
+{
+type:"text",
+text:`รอง ${price.r1}`
+},
+{
+type:"text",
+text:`รับสูงสุด ${maxBet}`
+}
+]
+}
+}
+};
+
+await client.replyMessage(event.replyToken,flex);
 
 continue;
-
 }
 
-/* ปิดราคา */
+/* =========================
+ปิดราคา
+========================= */
 
 if(msg === "ปิดราคา"){
 
 if(uid !== ADMIN_ID) continue;
 
-fightOpen = false;
+priceOpen = false;
 
 await client.replyMessage(event.replyToken,{
 type:"text",
@@ -93,32 +184,42 @@ text:"❌ ปิดราคาแล้ว"
 });
 
 continue;
-
 }
 
-/* แทง */
+/* =========================
+แทง
+========================= */
 
 if(msg.startsWith("ด") || msg.startsWith("ง")){
 
-if(!fightOpen){
+if(!fightOpen || !priceOpen){
 
 await client.replyMessage(event.replyToken,{
 type:"text",
-text:"❌ ตอนนี้ปิดราคา"
+text:"❌ ตอนนี้ยังไม่เปิดราคา"
 });
 
 continue;
-
 }
 
 const side = msg[0];
 const amount = parseInt(msg.substring(1));
 
-if(isNaN(amount)) continue;
+if(isNaN(amount)){
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:"รูปแบบแทงผิด เช่น ด500"
+});
+
+continue;
+}
+
+/* เช็คยอดเต็ม */
 
 if(totalBet + amount > maxBet){
 
-fightOpen = false;
+priceOpen = false;
 
 await client.replyMessage(event.replyToken,{
 type:"text",
@@ -126,8 +227,9 @@ text:"❌ เต็มโต๊ะ ปิดราคา"
 });
 
 continue;
-
 }
+
+/* เช็คเครดิต */
 
 if(users[uid].credit < amount){
 
@@ -137,50 +239,116 @@ text:"❌ เครดิตไม่พอ"
 });
 
 continue;
-
 }
 
+/* หักเครดิต */
+
 users[uid].credit -= amount;
+
 totalBet += amount;
 
-if(!bets[uid]) bets[uid] = [];
+/* บันทึก */
 
-bets[uid].push({
-side,
-amount
+bets.push({
+uid:uid,
+name:users[uid].name,
+side:side,
+amount:amount,
+price:price.r1+"/"+price.r2
 });
+
+/* ตอบ */
 
 await client.replyMessage(event.replyToken,{
 type:"text",
-text:`${users[uid].name} ${side=="ด"?"ต่อ":"รอง"} ${amount}`
+text:`${users[uid].name} ${side=="ด"?"ต่อ":"รอง"} ${side}${amount}`
 });
 
 continue;
-
 }
 
-/* เช็คเครดิต */
+/* =========================
+เช็คเครดิต
+========================= */
 
 if(msg.toLowerCase() === "c"){
 
 let text = `👤 ${users[uid].name}\n`;
-text += `💰 เครดิต ${users[uid].credit}\n`;
+text += `💰 เครดิต ${users[uid].credit}\n\n`;
+
+text += "📊 รายการแทง\n";
+
+bets.forEach(b=>{
+if(b.uid === uid){
+text += `${b.side}${b.amount} @${b.price}\n`;
+}
+});
 
 await client.replyMessage(event.replyToken,{
 type:"text",
 text:text
 });
 
+continue;
+}
+
+/* =========================
+แจ้งเติมเงิน
+========================= */
+
+if(msg.startsWith("เติม")){
+
+const amount = parseInt(msg.split(" ")[1]);
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:`📥 แจ้งเติม ${amount}`
+});
+
+continue;
+}
+
+/* =========================
+แอดมินเพิ่มเครดิต
+/add USERID 500
+========================= */
+
+if(msg.startsWith("/add")){
+
+if(uid !== ADMIN_ID) continue;
+
+const sp = msg.split(" ");
+
+const target = sp[1];
+const amount = parseInt(sp[2]);
+
+if(!users[target]){
+
+users[target] = {
+name:"USER",
+credit:0
+};
+
+}
+
+users[target].credit += amount;
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:`✅ เพิ่มเครดิต ${amount}`
+});
+
+continue;
 }
 
 }
 
-res.sendStatus(200);
+res.status(200).end();
 
 }catch(err){
 
 console.log(err);
-res.sendStatus(500);
+res.status(200).end();
 
 }
 
@@ -195,5 +363,5 @@ res.send("BOT RUNNING");
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT,()=>{
-console.log("Server running "+PORT);
+console.log("Server running on "+PORT);
 });

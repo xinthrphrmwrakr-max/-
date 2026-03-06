@@ -1,10 +1,20 @@
-const mongoose=require("mongoose");
+const mongoose = require("mongoose");
 
-module.exports=mongoose.model("Fight",{
-fightId:Number,
+const FightSchema = new mongoose.Schema({
+
+fightId:String,
 red:String,
 blue:String,
+
 rateRed:String,
 rateBlue:String,
-status:String
+
+status:{
+type:String,
+default:"open"
+}
+
 });
+
+module.exports =
+mongoose.model("Fight",FightSchema);

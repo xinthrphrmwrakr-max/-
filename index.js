@@ -29,7 +29,14 @@ mongoose.connect(process.env.MONGO_URI)
 let users = {}; 
 let bets = {}; 
 
-let fightOpen = false; // เปิดราคาไหม
+let fightOpen = false; // เปิดปิดราคา
+
+let price = null;
+let maxBet = 0;
+let totalBet = 0;
+
+/* ADMIN USER ID */
+const ADMIN = "ใส่USER_IDแอดมิน";
 
 /* WEBHOOK */
 app.post("/webhook", line.middleware(config), async (req,res)=>{
@@ -44,6 +51,11 @@ app.post("/webhook", line.middleware(config), async (req,res)=>{
 
       const msg = event.message.text.trim();
       const uid = event.source.userId;
+      /* ดู USER ID ใน Log */
+console.log("USER ID =", uid);
+
+/* ดึงชื่อ LINE */
+const profile = await client.getProfile(uid);
 
       /* ดึงชื่อ LINE */
       const profile = await client.getProfile(uid);

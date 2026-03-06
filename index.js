@@ -12,8 +12,9 @@ const app=express();
 app.use(express.json());
 
 const config = {
-  channelAccessToken: "rULcYwAsV4CS7pD4hWcQvNTvxt3wHIXGjVUfCQFN6rYJkn49wc2jG8EPaqJxJToqmETEO04/zAjuu4RojiWR/SRZFzTBMpQEeBpgYQbDJ2Sr63x4Ia2wu8vfSR9dkgZyur7SI4f56PN0LHSuen+EpwdB04t89/1O/w1cDnyilFU=",
-  channelSecret: "5bd5a4a0980d497b71e4eae7d217d1cf"
+  channelAccessToken: "D/cwg/Hx8zG0YLZIILM1Yjzxx8SJ3EUGqlTOV8qG/9C9Oq1StaXS35vGpdpP0e7/mETEO04/zAjuu4RojiWR/SRZFzTBMpQEeBpgYQbDJ2QMozk76ygLo+FwiR7hx6X7q0yW0uOx27m1cbqf2RgwywdB04t89/1O/w1cDnyilFU=
+=",
+  channelSecret: "569c57041ab7ff6ffb6b907612716c32"
 };
 
 const client=new line.Client(config);
@@ -176,8 +177,8 @@ if(event.message.type!=="text") return null;
 const msg = event.message.text.trim();
 const userId = event.source.userId;
 
-let user = await User.findOne({userId});
-
+if(!user)
+return reply(event,"❌ กรุณาพิมพ์ สมัคร ก่อน");
 
 // ================= สมัคร =================
 if(msg==="สมัคร"){
@@ -406,14 +407,10 @@ return reply(event,"⚠️ ระบบกำลังโหลด");
 
 }
 
-
 // ================= SERVER =================
-app.get("/",(req,res)=>{
-res.send("BOT RUNNING");
-});
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT,()=>{
-console.log("🚀 Bot Running "+PORT);
+console.log("🚀 BOT RUNNING ON",PORT);
 });

@@ -149,15 +149,17 @@ if(event.type!=="message") return;
 if(event.message.type!=="text") return;
 
 const msg = event.message.text.trim();
+const userId = event.source.userId;
+
+// ===== ดึง user =====
+let user = await User.findOne({userId});
+
 
 // ================= สมัคร =================
 if(msg==="สมัคร"){
 
-const userId = event.source.userId;
-
 let profile;
 
-// ✅ ดึงชื่อจาก LINE
 try{
 
 if(event.source.type==="group"){
@@ -170,20 +172,16 @@ profile = await client.getProfile(userId);
 }
 
 }catch(err){
-console.log("ดึงชื่อไม่ได้");
-profile = {displayName:"สมาชิก"};
+profile={displayName:"สมาชิก"};
 }
 
 const displayName = profile.displayName;
-
-// ✅ เช็คสมาชิก
-let user = await User.findOne({userId});
 
 if(!user){
 
 user = await User.create({
 userId,
-name: displayName,
+name:displayName,
 credit:0
 });
 
@@ -191,39 +189,48 @@ return reply(event,
 `✅ สมัครสมาชิกสำเร็จ
 👤 ${displayName}
 💰 เครดิต 0`);
+
 }
 
-// ✅ สมัครซ้ำ
 return reply(event,
 `✅ คุณสมัครแล้ว
 👤 ${user.name}
 💰 เครดิต ${user.credit}`);
-}
-
-}catch(err){
-
-console.log("HANDLE ERROR:",err);
-
-return reply(event,"⚠️ ระบบกำลังโหลด");
 
 }
+
+
+// ================= เครดิต =================
+if(msg==="เครดิต"){
+
+if(!user)
+return reply(event,"❌ ยังไม่ได้สมัคร\nพิมพ์ สมัคร");
+
+return reply(event,
+`👤 ${user.name}
+💰 เครดิต ${user.credit}`);
+
 }
+
+
 // ===== เติม =====
 // เติม USERID 1000
 if(msg.startsWith("เติม")){
 
-if(userId!==ADMIN)return;
+if(userId!==ADMIN) return;
 
-const d=msg.split(" ");
+const d = msg.split(" ");
 
-let u=await User.findOne({userId:d[1]});
-if(!u)
-u=await User.create({
+let u = await User.findOne({userId:d[1]});
+
+if(!u){
+u = await User.create({
 userId:d[1],
 credit:0
 });
+}
 
-u.credit+=Number(d[2]);
+u.credit += Number(d[2]);
 await u.save();
 
 return reply(event,"✅ เติมเครดิตแล้ว");
@@ -233,11 +240,11 @@ return reply(event,"✅ เติมเครดิตแล้ว");
 // ===== เปิดคู่ =====
 if(msg.startsWith("เปิดคู่")){
 
-if(userId!==ADMIN)return;
+if(userId!==ADMIN) return;
 
-const d=msg.split(" ");
+const d = msg.split(" ");
 
-const fight=await Fight.create({
+const fight = await Fight.create({
 fightId:d[1],
 red:d[2],
 blue:d[3],
@@ -254,9 +261,12 @@ return pushTable(fight);
 // 101 R 500
 if(/^\d+\s[RB]\s\d+$/i.test(msg)){
 
-const d=msg.split(" ");
+if(!user)
+return reply(event,"❌ กรุณาสมัครก่อน");
 
-const fight=await Fight.findOne({
+const d = msg.split(" ");
+
+const fight = await Fight.findOne({
 fightId:d[0],
 status:"open"
 });
@@ -288,13 +298,14 @@ return reply(event,
 คู่ ${fight.fightId}
 ${side}
 ${money}`);
+
 }
 
 
 // ===== ปิดคู่ =====
 if(msg.startsWith("ปิดคู่")){
 
-if(userId!==ADMIN)return;
+if(userId!==ADMIN) return;
 
 await Fight.updateOne(
 {fightId:msg.split(" ")[1]},
@@ -312,35 +323,36 @@ GROUP_ID,
 // ชนะ 101 R
 if(msg.startsWith("ชนะ")){
 
-if(userId!==ADMIN)return;
+if(userId!==ADMIN) return;
 
-const d=msg.split(" ");
-const id=d[1];
-const win=d[2].toUpperCase();
+const d = msg.split(" ");
+const id = d[1];
+const win = d[2].toUpperCase();
 
-const fight=await Fight.findOne({fightId:id});
+const fight = await Fight.findOne({fightId:id});
 
-const bets=await Bet.find({
+const bets = await Bet.find({
 fightId:id,
 side:win
 });
 
 for(const b of bets){
 
-const u=await User.findOne({
+const u = await User.findOne({
 userId:b.userId
 });
 
-const rate=
+const rate =
 win==="R"
 ?fight.rateRed
 :fight.rateBlue;
 
-u.credit+=
-b.amount+
+u.credit +=
+b.amount +
 calcPay(rate,b.amount);
 
 await u.save();
+
 }
 
 await Fight.updateOne(
@@ -350,21 +362,19 @@ await Fight.updateOne(
 
 return client.pushMessage(
 GROUP_ID,
-{type:"text",
-text:`🏆 คู่ ${id} ตัดสินแล้ว`}
-);
-}
+{
+type:"text",
+text:`🏆 คู่ ${id} ตัดสินแล้ว`
+});
 
 }
 
+}catch(err){
 
-// ================= REPLY =================
-function reply(event,text){
-return client.replyMessage(
-event.replyToken,
-{type:"text",text}
-);
+console.log("HANDLE ERROR:",err);
+
+return reply(event,"⚠️ ระบบกำลังโหลด");
+
 }
 
-app.listen(3000,
-()=>console.log("🚀 BOT V13 RUNNING"));
+}

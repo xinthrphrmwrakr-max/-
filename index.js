@@ -26,15 +26,15 @@ const GROUP_ID="Cbe4b98d3adcc05e91341e544ef99ba5d";
 // ================= WEBHOOK =================
 app.post("/webhook",
 line.middleware(config),
-(req,res)=>{
+async(req,res)=>{
 
-Promise
-.all(req.body.events.map(handleEvent))
-.then(()=>res.sendStatus(200))
-.catch(err=>{
-console.log(err);
+try{
+await Promise.all(req.body.events.map(handleEvent));
+res.sendStatus(200);
+}catch(err){
+console.error(err);
 res.sendStatus(500);
-});
+}
 
 });
 

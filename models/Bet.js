@@ -1,8 +1,16 @@
 const mongoose=require("mongoose");
 
-module.exports=mongoose.model("Bet",{
+const BetSchema=new mongoose.Schema({
+
 userId:String,
-fightId:Number,
+name:String,
+
+fightId:String,
+
 side:String,
 amount:Number
+
 });
+
+module.exports=
+mongoose.model("Bet",BetSchema);

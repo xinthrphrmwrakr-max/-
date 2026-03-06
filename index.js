@@ -408,6 +408,10 @@ return reply(event,"⚠️ ระบบกำลังโหลด");
 
 
 // ================= SERVER =================
+app.get("/",(req,res)=>{
+res.send("BOT RUNNING");
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT,()=>{

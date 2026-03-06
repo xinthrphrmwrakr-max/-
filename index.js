@@ -26,17 +26,16 @@ mongoose.connect(process.env.MONGO_URI)
    MEMORY DATABASE
 ------------------------------*/
 
-let users = {}; 
-let bets = {}; 
+let users = {};
+let bets = {};
 
-let fightOpen = false; // เปิดปิดราคา
+let fightOpen = false; // เปิดราคาไหม
+let price = null;      // ราคาปัจจุบัน
+let maxBet = 0;       // จำกัดยอด
+let totalBet = 0;     // ยอดรวม
 
-let price = null;
-let maxBet = 0;
-let totalBet = 0;
-
-/* ADMIN USER ID */
-const ADMIN = "ใส่USER_IDแอดมิน";
+/* ADMIN */
+const ADMIN_ID = "ใส่USER_IDแอดมิน";
 
 /* WEBHOOK */
 app.post("/webhook", line.middleware(config), async (req,res)=>{

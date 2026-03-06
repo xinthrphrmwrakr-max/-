@@ -53,8 +53,6 @@ if(event.type !== "message") continue;
 if(event.message.type !== "text") continue;
 
 const msg = event.message.text.trim();
-
-const msg = event.message.text.trim();
 const uid = event.source.userId;
 
 let profile;
@@ -64,7 +62,7 @@ profile = await client.getProfile(uid);
 }catch{
 profile = { displayName: "สมาชิก" };
 }
-  
+
 if(!users[uid]){
 users[uid] = {
 name: profile.displayName,

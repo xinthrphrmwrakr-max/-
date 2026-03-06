@@ -50,13 +50,34 @@ app.post("/webhook",line.middleware(config),(req,res)=>{
 
 async function handleEvent(event){
 
- if(event.type!=="message") return;
- if(event.message.type!=="text") return;
+if(event.type!="message") return;
+if(event.message.type!="text") return;
 
- const msg = event.message.text.trim();
- const uid = event.source.userId;
+const msg = event.message.text.trim();
+const uid = event.source.userId;
 
- let user = await User.findOne({userId:uid});
+let user = await User.findOne({userId:uid});
+
+if(msg === "C"){
+  return client.replyMessage(event.replyToken,{
+    type:"text",
+    text:"เช็คเครดิต"
+  });
+}
+
+if(msg === "ด500"){
+  return client.replyMessage(event.replyToken,{
+    type:"text",
+    text:"แทง ด 500 สำเร็จ"
+  });
+}
+
+return client.replyMessage(event.replyToken,{
+  type:"text",
+  text:"บอททำงานแล้ว"
+});
+
+}
 
  /* ===== สมัคร ===== */
 

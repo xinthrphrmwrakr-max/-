@@ -11,8 +11,8 @@ const Bet = require("./models/Bet");
 const app = express();
 
 const config = {
- channelAccessToken: process.env.D/cwg/Hx8zG0YLZIILM1Yjzxx8SJ3EUGqlTOV8qG/9C9Oq1StaXS35vGpdpP0e7/mETEO04/zAjuu4RojiWR/SRZFzTBMpQEeBpgYQbDJ2QMozk76ygLo+FwiR7hx6X7q0yW0uOx27m1cbqf2RgwywdB04t89/1O/w1cDnyilFU=,
- channelSecret: process.env.569c57041ab7ff6ffb6b907612716c32
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.CHANNEL_SECRET
 };
 
 const client = new line.Client(config);

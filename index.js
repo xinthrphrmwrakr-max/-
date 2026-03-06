@@ -225,7 +225,7 @@ return reply(event,
 
 
 // ================= เครดิต =================
-if(msg==="เครดิต"){
+if(msg==="เครดิต" || msg.toLowerCase()==="c"){
 
 if(!user)
 return reply(event,"❌ ยังไม่ได้สมัคร\nพิมพ์ สมัคร");

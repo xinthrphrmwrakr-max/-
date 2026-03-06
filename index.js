@@ -9,6 +9,7 @@ const Fight=require("./models/Fight");
 const Bet=require("./models/Bet");
 
 const app=express();
+app.use(express.json());
 
 const config = {
   channelAccessToken: "rULcYwAsV4CS7pD4hWcQvNTvxt3wHIXGjVUfCQFN6rYJkn49wc2jG8EPaqJxJToqmETEO04/zAjuu4RojiWR/SRZFzTBMpQEeBpgYQbDJ2Sr63x4Ia2wu8vfSR9dkgZyur7SI4f56PN0LHSuen+EpwdB04t89/1O/w1cDnyilFU=",
@@ -18,10 +19,21 @@ const config = {
 const client=new line.Client(config);
 
 mongoose.connect(process.env.MONGO_URI)
-.then(()=>console.log("✅ Mongo Connected"));
+.then(()=>console.log("✅ Mongo Connected"))
+.catch(err=>console.log(err));
 
-const ADMIN="U3bb879084521bbe454c63a2fb7d56c64"; 
+const ADMIN="U3bb879084521bbe454c63a2fb7d56c64";
 const GROUP_ID="Cbe4b98d3adcc05e91341e544ef99ba5d";
+
+
+// ================= REPLY =================
+function reply(event,text){
+return client.replyMessage(event.replyToken,{
+type:"text",
+text:text
+});
+}
+
 
 // ================= WEBHOOK =================
 app.post("/webhook",
@@ -29,11 +41,15 @@ line.middleware(config),
 async(req,res)=>{
 
 try{
+
 await Promise.all(req.body.events.map(handleEvent));
 res.sendStatus(200);
+
 }catch(err){
+
 console.error(err);
 res.sendStatus(500);
+
 }
 
 });
@@ -58,31 +74,40 @@ let profile;
 try{
 
 if(event.source.type==="group"){
+
 profile=
 await client.getGroupMemberProfile(
 event.source.groupId,
 uid
 );
+
 }else{
+
 profile=
 await client.getProfile(uid);
+
 }
 
 }catch{
+
 profile={displayName:"User"};
+
 }
 
 let user=await User.findOne({userId:uid});
 
 if(!user){
+
 user=await User.create({
 userId:uid,
 name:profile.displayName,
 credit:0
 });
+
 }
 
 return user;
+
 }
 
 
@@ -145,13 +170,12 @@ async function handleEvent(event){
 
 try{
 
-if(event.type!=="message") return;
-if(event.message.type!=="text") return;
+if(event.type!=="message") return null;
+if(event.message.type!=="text") return null;
 
 const msg = event.message.text.trim();
 const userId = event.source.userId;
 
-// ===== ดึง user =====
 let user = await User.findOne({userId});
 
 
@@ -171,7 +195,7 @@ userId
 profile = await client.getProfile(userId);
 }
 
-}catch(err){
+}catch{
 profile={displayName:"สมาชิก"};
 }
 
@@ -214,33 +238,35 @@ return reply(event,
 
 
 // ===== เติม =====
-// เติม USERID 1000
 if(msg.startsWith("เติม")){
 
-if(userId!==ADMIN) return;
+if(userId!==ADMIN) return null;
 
 const d = msg.split(" ");
 
 let u = await User.findOne({userId:d[1]});
 
 if(!u){
+
 u = await User.create({
 userId:d[1],
 credit:0
 });
+
 }
 
 u.credit += Number(d[2]);
 await u.save();
 
 return reply(event,"✅ เติมเครดิตแล้ว");
+
 }
 
 
 // ===== เปิดคู่ =====
 if(msg.startsWith("เปิดคู่")){
 
-if(userId!==ADMIN) return;
+if(userId!==ADMIN) return null;
 
 const d = msg.split(" ");
 
@@ -254,11 +280,11 @@ status:"open"
 });
 
 return pushTable(fight);
+
 }
 
 
 // ===== แทง =====
-// 101 R 500
 if(/^\d+\s[RB]\s\d+$/i.test(msg)){
 
 if(!user)
@@ -305,7 +331,7 @@ ${money}`);
 // ===== ปิดคู่ =====
 if(msg.startsWith("ปิดคู่")){
 
-if(userId!==ADMIN) return;
+if(userId!==ADMIN) return null;
 
 await Fight.updateOne(
 {fightId:msg.split(" ")[1]},
@@ -316,14 +342,14 @@ return client.pushMessage(
 GROUP_ID,
 {type:"text",text:"⛔ ปิดรับแทง"}
 );
+
 }
 
 
 // ===== ตัดสิน =====
-// ชนะ 101 R
 if(msg.startsWith("ชนะ")){
 
-if(userId!==ADMIN) return;
+if(userId!==ADMIN) return null;
 
 const d = msg.split(" ");
 const id = d[1];
@@ -369,12 +395,21 @@ text:`🏆 คู่ ${id} ตัดสินแล้ว`
 
 }
 
+return null;
+
 }catch(err){
 
 console.log("HANDLE ERROR:",err);
-
 return reply(event,"⚠️ ระบบกำลังโหลด");
 
 }
 
 }
+
+
+// ================= SERVER =================
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT,()=>{
+console.log("🚀 Bot Running "+PORT);
+});

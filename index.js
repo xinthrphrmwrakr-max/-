@@ -55,20 +55,6 @@ if(event.message.type !== "text") continue;
 const msg = event.message.text.trim();
 const uid = event.source.userId;
 
-// โหลดชื่อสมาชิก
-const profile = await client.getProfile(uid);
-
-if(!users[uid]){
-users[uid] = {
-name: profile.displayName,
-credit: 1000
-};
-}
-
-console.log("USER:",uid,msg);
-
-/* โหลดชื่อผู้ใช้ */
-
 const profile = await client.getProfile(uid);
 
 if(!users[uid]){

@@ -54,16 +54,24 @@ if(event.message.type !== "text") continue;
 
 const msg = event.message.text.trim();
 
-const uid = event.source.userId; // ใช้ userId
-const profile = await client.getProfile(uid);
+const msg = event.message.text.trim();
+const uid = event.source.userId;
 
+let profile;
+
+try{
+profile = await client.getProfile(uid);
+}catch{
+profile = { displayName: "สมาชิก" };
+}
+  
 if(!users[uid]){
 users[uid] = {
 name: profile.displayName,
 credit: 1000
 };
 }
-
+  
 /* =========================
 เปิดโต๊ะ
 ========================= */

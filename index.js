@@ -1,7 +1,12 @@
-require("dotenv").config();
+require('dotenv').config();
+
 const express = require("express");
 const line = require("@line/bot-sdk");
 const mongoose = require("mongoose");
+
+const User = require("./models/User");
+const Table = require("./models/Table");
+const Bet = require("./models/Bet");
 
 const app = express();
 
@@ -49,6 +54,16 @@ if(event.message.type !== "text") continue;
 
 const msg = event.message.text.trim();
 const uid = event.source.userId;
+
+// โหลดชื่อสมาชิก
+const profile = await client.getProfile(uid);
+
+if(!users[uid]){
+users[uid] = {
+name: profile.displayName,
+credit: 1000
+};
+}
 
 console.log("USER:",uid,msg);
 

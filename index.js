@@ -401,10 +401,20 @@ if(msg.startsWith("/add")){
 
 if(uid !== ADMIN_ID) continue;
 
-const sp = msg.split(" ");
+const sp = msg.trim().split(/\s+/);
 
 const target = sp[1];
-const amount = parseInt(sp[2]);
+const amount = Number(sp[2]);
+
+if(!target || isNaN(amount)){
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:"❌ ใช้คำสั่ง /add USERID จำนวนเงิน"
+});
+
+continue;
+}
 
 if(!users[target]){
 

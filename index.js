@@ -192,7 +192,67 @@ text:"❌ ปิดราคาแล้ว"
 
 continue;
 }
+  
+/* =========================
+ประกาศผล
+ผล ด  หรือ  ผล ง
+========================= */
 
+if(msg.startsWith("ผล")){
+
+if(uid !== ADMIN_ID) continue;
+
+const winSide = msg.split(" ")[1];
+
+if(!winSide){
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:"ใช้คำสั่ง ผล ด หรือ ผล ง"
+});
+continue;
+}
+
+let summary = "🏆 สรุปผล\n\n";
+
+bets.forEach(b=>{
+
+if(b.side === winSide){
+
+let win = 0;
+
+const r = b.price.split("/");
+const r1 = parseFloat(r[0]);
+const r2 = parseFloat(r[1]);
+
+if(winSide === "ด"){
+win = b.amount + (b.amount * r2 / 10);
+}else{
+win = b.amount + (b.amount * r1 / 10);
+}
+
+users[b.uid].credit += Math.floor(win);
+
+summary += `✅ ${b.name} +${Math.floor(win)}\n`;
+
+}else{
+
+summary += `❌ ${b.name} -${b.amount}\n`;
+
+}
+
+});
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:summary
+});
+
+bets = [];
+totalBet = 0;
+
+continue;
+}
+  
 /* =========================
 แทง
 ========================= */

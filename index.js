@@ -365,16 +365,33 @@ continue;
 
 if(msg.startsWith("เติม")){
 
-const amount = parseInt(msg.split(" ")[1]);
+const sp = msg.split(" ");
+const amount = parseInt(sp[1]);
+
+if(isNaN(amount)){
 
 await client.replyMessage(event.replyToken,{
 type:"text",
-text:`📥 แจ้งเติม ${amount}`
+text:"❌ รูปแบบ เช่น เติม 500"
 });
 
 continue;
 }
 
+let text = "📥 แจ้งเติมเครดิต\n\n";
+
+text += `👤 ${users[uid].name}\n`;
+text += `💰 จำนวน ${amount}\n`;
+text += `🆔 USER ID\n${uid}`;
+
+await client.replyMessage(event.replyToken,{
+type:"text",
+text:text
+});
+
+continue;
+}
+  
 /* =========================
 แอดมินเพิ่มเครดิต
 /add USERID 500
